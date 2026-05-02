@@ -7,13 +7,15 @@ import {
   createInitialState, advanceDay, saveState, loadState, clearState,
   generateOpportunity, STAGES, ACTIONS_PER_DAY,
   actionScheduleDemo, actionHostDemo, actionSchedulePricing,
-  actionBuildProposal, actionHostPricing, actionCloseCall, actionRebookCall,
+  actionBuildProposal, actionHostPricing, actionCloseCall, actionRebookCall, actionTouchBase,
   getActiveOpps, formatDate, dayNumberToDate, nextEmailId,
+  BDR_ROSTER, getActiveBDR,
 } from './engine.js';
 
 import {
   renderHeader, renderCalendar, renderEmails, renderEmailBody,
-  renderPhone, renderPipeline, renderStats, showModal, closeModal,
+  renderPhone, renderPipeline, renderStats, renderIdCard,
+  showModal, closeModal,
 } from './ui.js';
 
 import {
@@ -22,7 +24,8 @@ import {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-let state = null;
+let state     = null;
+let _phoneTab = 'contacts';
 
 // ─── Full render ──────────────────────────────────────────────────────────────
 
@@ -31,9 +34,17 @@ function renderAll() {
   renderCalendar(state, handleCalendarEvent);
   renderEmails(state, handleEmailSelect);
   renderEmailBody(state, _currentEmailId, handleEmailAction);
-  renderPhone(state, handleCallClick);
+  renderPhone(state, handleCallClick, handleContactClick, _phoneTab);
   renderPipeline(state, handleKanbanClick);
   renderStats(state);
+  renderIdCard(state);
+  // BDR button indicator: pulse when unlocked BDRs exist that aren't yet hired
+  const bdrBtn = document.getElementById('bdr-btn');
+  if (bdrBtn) {
+    const hasUnhiredUnlocked = state.availableBDRs.some(id => id !== 'none' && id !== state.activeBDR);
+    bdrBtn.classList.toggle('has-new', hasUnhiredUnlocked);
+    bdrBtn.title = hasUnhiredUnlocked ? 'New BDR available!' : 'Manage your BDR';
+  }
   saveState(state);
 }
 
@@ -108,6 +119,11 @@ function showEventDetails(opp, type) {
 
 // ─── Phone handler ────────────────────────────────────────────────────────────
 
+window._setPhoneTab = function(tab) {
+  _phoneTab = tab;
+  renderPhone(state, handleCallClick, handleContactClick, _phoneTab);
+};
+
 function handleCallClick(oppId) {
   const opp = state.opportunities.find(o => o.id === oppId);
   if (!opp) return;
@@ -117,6 +133,70 @@ function handleCallClick(oppId) {
     return;
   }
   launchDialogueMatcher(opp);
+}
+
+function handleContactClick(oppId) {
+  const opp = state.opportunities.find(o => o.id === oppId);
+  if (!opp) return;
+
+  if (opp.stage === STAGES.LIVE_CALL || opp.stage === STAGES.FUTURE) {
+    handleCallClick(oppId);
+    return;
+  }
+
+  const bdrTier = getActiveBDR(state).tier;
+  const notes   = opp.bdrNotes || {};
+
+  let demoLine = '';
+  if (opp.demoDay !== null) {
+    demoLine = `<div style="font-size:11px;font-family:Arial,sans-serif;color:#000080;margin-bottom:8px;padding:3px 6px;border:1px solid #000080;display:inline-block">
+      See you on ${formatDate(dayNumberToDate(opp.demoDay))}
+    </div>`;
+  } else {
+    demoLine = `<div style="font-size:11px;font-family:Arial,sans-serif;color:#808080;margin-bottom:8px">No demo scheduled yet</div>`;
+  }
+
+  let notesHtml = `<div style="background:#ffffff;border:2px solid;border-color:#808080 #ffffff #ffffff #808080;padding:8px;margin-bottom:10px">
+    <div style="font-size:9px;font-family:Arial,sans-serif;font-weight:bold;color:#000080;letter-spacing:.05em;margin-bottom:4px">BUYER NOTES</div>
+    <div style="font-size:11px;font-family:Arial,sans-serif;color:#404040;line-height:1.6;margin-bottom:4px">${opp.flavourNote || '—'}</div>`;
+  if (bdrTier >= 1) {
+    notesHtml += `<div style="font-size:10px;font-family:Arial,sans-serif;color:#808080;font-style:italic">Basic qualification complete.</div>`;
+  }
+  if (bdrTier >= 2 && notes.budget) {
+    notesHtml += `<div style="margin-top:6px;font-size:10px;font-family:'Courier New',monospace;color:#000000;line-height:1.7">
+      ${notes.budget}<br>${notes.timeline}<br>Key contact: ${notes.stakeholder}
+    </div>`;
+  }
+  if (bdrTier >= 4 && notes.competitive) {
+    notesHtml += `<div style="font-size:10px;font-family:'Courier New',monospace;color:#000000">Competitive: ${notes.competitive}</div>`;
+  }
+  notesHtml += `</div>`;
+
+  const canTouch = state.actionsRemaining > 0;
+  const buttons  = [
+    canTouch
+      ? { label: 'Touch base (1 action)', primary: true, onclick: `window._contactTouchBase(${opp.id})` }
+      : { label: 'No actions left', onclick: 'window.closeModal()' },
+    { label: 'Close', onclick: 'window.closeModal()' },
+  ];
+
+  showModal(
+    `${opp.name} — ${opp.company}`,
+    `${demoLine}${notesHtml}`,
+    buttons
+  );
+
+  window._contactTouchBase = (id) => {
+    const result = actionTouchBase(state, id);
+    if (result.success) {
+      result.apply(state);
+      closeModal();
+      renderAll();
+      setTimeout(() => showToast(result.message), 200);
+    } else {
+      alert(result.message);
+    }
+  };
 }
 
 // ─── Kanban click handler ─────────────────────────────────────────────────────
@@ -703,10 +783,21 @@ function showToast(msg) {
 
 // ─── Day navigation ───────────────────────────────────────────────────────────
 
+window.switchAvatar = function() {
+  state.avatarIndex = state.avatarIndex === 0 ? 1 : 0;
+  renderIdCard(state);
+  saveState(state);
+};
+
 window.nextDay = function() {
   state = advanceDay(state);
   _currentEmailId = null;
   renderAll();
+  if (state.pendingBDRReminder) {
+    state.pendingBDRReminder = false;
+    saveState(state);
+    setTimeout(showBDRReminder, 150);
+  }
 };
 
 window.prevDay = function() {
@@ -730,6 +821,21 @@ function initGame() {
     // Migrate old saves: ensure new fields exist
     if (state.monthRevenue === undefined) state.monthRevenue = 0;
     if (!state.quarterMonthHits) state.quarterMonthHits = [false, false, false];
+    if (state.employeeId === undefined) state.employeeId = String(Math.floor(100000 + Math.random() * 900000));
+    if (state.avatarIndex === undefined) state.avatarIndex = 0;
+    if (state.activeBDR === undefined) state.activeBDR = null;
+    if (!state.availableBDRs) state.availableBDRs = ['none'];
+    if (!state.bdrUnlockLog) state.bdrUnlockLog = [];
+    if (state.q1AboveQuota === undefined) state.q1AboveQuota = false;
+    if (state.q2AboveQuota === undefined) state.q2AboveQuota = false;
+    if (state.pendingBDRReminder === undefined) state.pendingBDRReminder = false;
+    // Retroactively unlock BDRs for old saves
+    if (state.dayNumber >= 5 && !state.availableBDRs.includes('basic'))    state.availableBDRs.push('basic');
+    if (state.dayNumber >= 20 && !state.availableBDRs.includes('standard')) state.availableBDRs.push('standard');
+    // Ensure all opps have bdrNotes
+    state.opportunities.forEach(o => {
+      if (!o.bdrNotes) o.bdrNotes = { budget: 'Unknown', timeline: 'Unknown', stakeholder: 'Unknown', competitive: 'Unknown' };
+    });
   } else {
     state = createInitialState();
     // Seed with 3 starting opps at staggered deadlines
@@ -767,6 +873,176 @@ function initGame() {
     saveState(state);
   }
   renderAll();
+  if (!localStorage.getItem('hasSeenIntro')) {
+    setTimeout(showOnboardingModal, 120);
+  }
+}
+
+// ─── BDR Panel ────────────────────────────────────────────────────────────────
+
+const BDR_AVATAR_COLORS = { none: '#808080', basic: '#808080', standard: '#008080', senior: '#000080', elite: '#5a0000' };
+const BDR_TIER_LABELS   = ['', 'TIER 1', 'TIER 2', 'TIER 3', 'TIER 4'];
+
+function bdrInitials(bdr) {
+  if (bdr.id === 'none') return '—';
+  return bdr.name.split(' ').map(w => w[0]).join('').substring(0, 2);
+}
+
+function renderBDRCard(bdr, isActive, isUnlocked) {
+  const avColor  = BDR_AVATAR_COLORS[bdr.id] || '#808080';
+  const tierLabel = bdr.tier > 0 ? BDR_TIER_LABELS[bdr.tier] : '';
+  const costColor = bdr.closeRateModifier > 0 ? '#00aa00' : bdr.closeRateModifier < 0 ? '#ff0000' : '#000000';
+
+  const benefitsList = bdr.benefits.map(b =>
+    `<div style="font-size:10px;font-family:Arial,sans-serif;color:${isUnlocked ? '#000000' : '#808080'};padding:1px 0">&#9632; ${b}</div>`
+  ).join('');
+
+  const actionBtn = isActive
+    ? `<span style="font-size:10px;font-family:Arial,sans-serif;padding:2px 8px;background:#000080;color:#ffffff;border:1px solid #000040">ACTIVE</span>`
+    : isUnlocked
+      ? `<button class="btn btn-sm" onclick="window._hireBDR('${bdr.id}')" style="font-size:10px">Hire</button>`
+      : `<span style="font-size:10px;font-family:Arial,sans-serif;color:#808080;font-style:italic">${bdr.unlockCondition || ''}</span>`;
+
+  return `<div style="border:2px solid;border-color:${isUnlocked ? '#ffffff #808080 #808080 #ffffff' : '#808080 #ffffff #ffffff #808080'};padding:8px;margin-bottom:6px;background:${isActive ? '#e0e0ff' : isUnlocked ? '#d4d0c8' : '#c0c0c0'};display:flex;gap:10px;align-items:flex-start">
+    <div style="width:36px;height:36px;background:${avColor};color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid #808080">${bdrInitials(bdr)}</div>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:2px;flex-wrap:wrap">
+        <span style="font-size:12px;font-family:Arial,sans-serif;font-weight:bold;color:${isUnlocked ? '#000000' : '#808080'}">${bdr.name}</span>
+        ${tierLabel ? `<span style="font-size:9px;font-family:Arial,sans-serif;font-weight:bold;padding:1px 5px;background:${avColor};color:#ffffff">${tierLabel}</span>` : ''}
+        ${bdr.title ? `<span style="font-size:10px;font-family:Arial,sans-serif;color:#808080">— ${bdr.title}</span>` : ''}
+      </div>
+      <div style="font-size:10px;font-family:'Courier New',monospace;color:${costColor};margin-bottom:4px">${bdr.cost}</div>
+      <div style="margin-bottom:6px">${benefitsList}</div>
+      ${actionBtn}
+    </div>
+  </div>`;
+}
+
+window.openBDRPanel = function() {
+  const activeBdr = getActiveBDR(state);
+  const currentSection = `
+    <div style="margin-bottom:10px">
+      <div style="font-size:10px;font-family:Arial,sans-serif;font-weight:bold;background:#000080;color:#ffffff;padding:2px 6px;margin-bottom:4px">CURRENT ASSIGNMENT</div>
+      ${renderBDRCard(activeBdr, true, true)}
+      ${activeBdr.id !== 'none'
+        ? `<button class="btn" onclick="window._fireBDR()" style="font-size:11px;margin-top:2px">Fire ${activeBdr.name.split(' ')[0]}</button>`
+        : ''}
+    </div>
+    <div style="font-size:10px;font-family:Arial,sans-serif;font-weight:bold;background:#000080;color:#ffffff;padding:2px 6px;margin-bottom:6px">AVAILABLE BDRs</div>
+    ${BDR_ROSTER.filter(b => b.id !== 'none').map(b => {
+      const isAct  = b.id === state.activeBDR;
+      const isUnlk = state.availableBDRs.includes(b.id);
+      return renderBDRCard(b, isAct, isUnlk);
+    }).join('')}`;
+
+  showModal('BDR Management', currentSection, [], true);
+};
+
+window._hireBDR = function(bdrId) {
+  const bdr = BDR_ROSTER.find(b => b.id === bdrId);
+  if (!bdr || !state.availableBDRs.includes(bdrId)) return;
+  const current = getActiveBDR(state);
+  if (current.id !== 'none') {
+    if (!confirm(`This will replace ${current.name}. Continue?`)) return;
+  }
+  state.activeBDR = bdrId;
+  saveState(state);
+  window.openBDRPanel();
+  renderAll();
+};
+
+window._fireBDR = function() {
+  const current = getActiveBDR(state);
+  if (current.id === 'none') return;
+  if (!confirm(`Are you sure you want to let ${current.name} go?`)) return;
+  state.activeBDR = null;
+  saveState(state);
+  window.openBDRPanel();
+  renderAll();
+};
+
+// ─── BDR Monday Reminder ──────────────────────────────────────────────────────
+
+function getOppNextDeadline(o, today) {
+  if (o.stage === STAGES.PRE_DEMO)          return o.scheduleBy;
+  if (o.stage === STAGES.DEMO_SCHEDULED)    return o.demoDay;
+  if (o.stage === STAGES.DEMO_HOSTED)       return o.pricingScheduleBy;
+  if (o.stage === STAGES.PROPOSAL)          return o.pricingDay;
+  if (o.stage === STAGES.PRICING_SCHEDULED) return o.pricingDay;
+  if (o.stage === STAGES.LIVE_CALL)         return o.liveCallBy;
+  if (o.stage === STAGES.FUTURE)            return o.futureExpiry;
+  return null;
+}
+
+function showBDRReminder() {
+  const bdr     = getActiveBDR(state);
+  const today   = state.dayNumber;
+  const active  = getActiveOpps(state);
+
+  const expiring = active
+    .map(o => ({ o, dl: getOppNextDeadline(o, today) }))
+    .filter(({ dl }) => dl !== null && dl >= today && dl <= today + 5)
+    .sort((a, b) => a.dl - b.dl);
+
+  const unscheduled = active.filter(o => o.stage === STAGES.PRE_DEMO);
+  const unbuilt     = active.filter(o => o.stage === STAGES.PROPOSAL);
+
+  const makeRow = (label, items, urgentFn) => {
+    if (items.length === 0) return '';
+    const rows = items.map(item => {
+      const o  = item.o || item;
+      const dl = item.dl || getOppNextDeadline(o, today);
+      const daysLeft = dl !== null ? dl - today : null;
+      const tag = daysLeft !== null && daysLeft <= 1 ? ' <span style="color:#ff0000;font-weight:bold">[URGENT]</span>' : '';
+      return `<div style="font-family:'Courier New',monospace;font-size:11px;padding:2px 4px;border-bottom:1px solid #c0c0c0">${o.company} — ${o.name}${tag}</div>`;
+    }).join('');
+    return `<div style="margin-bottom:8px">
+      <div style="font-size:10px;font-family:Arial,sans-serif;font-weight:bold;color:#000080;margin-bottom:2px">${label}</div>
+      <div style="border:2px solid;border-color:#808080 #ffffff #ffffff #808080;background:#ffffff">${rows}</div>
+    </div>`;
+  };
+
+  const body = `<div style="font-size:11px;font-family:Arial,sans-serif;color:#404040;margin-bottom:10px">
+    Good morning. Here's your weekly brief from <strong>${bdr.name}</strong>.
+  </div>
+  ${expiring.length > 0 ? makeRow('DEADLINES THIS WEEK', expiring) : '<div style="font-size:11px;font-family:Arial,sans-serif;color:#808080;margin-bottom:8px">No critical deadlines this week.</div>'}
+  ${makeRow('UNSCHEDULED DEMOS', unscheduled)}
+  ${makeRow('PROPOSALS NOT YET BUILT', unbuilt)}
+  ${expiring.length === 0 && unscheduled.length === 0 && unbuilt.length === 0
+    ? '<div style="font-size:11px;font-family:Arial,sans-serif;color:#00aa00">Pipeline looks clean. Keep it up.</div>' : ''}`;
+
+  showModal(`${bdr.name}'s Monday Brief`, body,
+    [{ label: 'Dismiss', onclick: 'window.closeModal()' }]);
+}
+
+// ─── Onboarding popup (first launch only) ────────────────────────────────────
+
+function showOnboardingModal() {
+  showModal(
+    'Welcome to Widget Wonders',
+    `<div style="margin:-12px -14px 14px -14px">
+       <img src="opening.png" style="width:100%;display:block;border-bottom:2px solid #808080" alt="Widget Wonders">
+     </div>
+     <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.75;color:#000000">
+       The Senior Executive Sales Rep of Global Operations has retired after 40 years of service, and
+       <strong>Widget Wonders</strong> — the leader in widget manufacturing — has hired you to fill their shoes.
+       Widget Wonders has been the gold standard in widgets for over 40 years.
+       <br><br>
+       Your job: build your book of business from scratch. You'll book demos, host presentations,
+       schedule pricing meetings, present proposals, and close deals — all while managing a growing
+       pipeline and keeping your manager happy.
+       <br><br>
+       Hit your quota every month, build your team, and climb the ranks. The corner office awaits.
+       <br><br>
+       <strong>Good luck, Rep. You're going to need it.</strong>
+     </div>`,
+    [{ label: "Let's get to work", primary: true, onclick: 'window._dismissOnboarding()' }],
+    true
+  );
+  window._dismissOnboarding = () => {
+    localStorage.setItem('hasSeenIntro', '1');
+    closeModal();
+  };
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────

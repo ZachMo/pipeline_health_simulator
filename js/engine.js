@@ -20,6 +20,67 @@ export const QUOTA_START             = 80000;
 export const QUOTA_MAX               = 250000;
 export const QUOTA_INCREASE_PCT      = 1.15;
 
+// ─── BDR Roster ───────────────────────────────────────────────────────────────
+
+export const BDR_ROSTER = [
+  {
+    id: 'none', name: 'No BDR assigned', title: '', tier: 0,
+    cost: 'You are on your own.',
+    benefits: ['You are on your own. Good luck.'],
+    closeRateModifier: 0, autoActions: [],
+  },
+  {
+    id: 'basic', name: 'Casey Park', title: 'Entry Level BDR', tier: 1,
+    unlockCondition: 'Available after Week 1',
+    cost: '-2% close rate on all deals (they make small mistakes)',
+    benefits: [
+      'Pre-demo emails include basic buyer notes (industry and stated need)',
+      'Daily task reminder popup each Monday morning',
+    ],
+    closeRateModifier: -0.02,
+    autoActions: ['dailyReminder', 'basicNotes'],
+  },
+  {
+    id: 'standard', name: 'Alex Chen', title: 'Junior BDR', tier: 2,
+    unlockCondition: 'Available after Month 1',
+    cost: '+0% close rate impact (neutral)',
+    benefits: [
+      'Pre-demo emails include richer notes: budget range, decision timeline, stakeholders',
+      'Daily task reminder popup with urgency sorting',
+      'Flags at-risk opportunities in the kanban with a warning icon',
+    ],
+    closeRateModifier: 0,
+    autoActions: ['dailyReminder', 'richNotes', 'riskFlags'],
+  },
+  {
+    id: 'senior', name: 'Jordan Mills', title: 'Senior BDR', tier: 3,
+    unlockCondition: 'Available after completing Q1 above quota',
+    cost: '+5% close rate on all deals',
+    benefits: [
+      'All benefits of Alex Chen',
+      'Automatically schedules one unbooked demo per week (highest value opp)',
+      'Sends a prep email before each demo with buyer research',
+      'Proactively calls one future opportunity per week (costs no player action)',
+    ],
+    closeRateModifier: 0.05,
+    autoActions: ['dailyReminder', 'richNotes', 'riskFlags', 'autoBookDemo', 'prepEmails', 'autoFutureCall'],
+  },
+  {
+    id: 'elite', name: 'Sam Rivera', title: 'Elite BDR', tier: 4,
+    unlockCondition: 'Available after completing Q2 above quota',
+    cost: '+12% close rate on all deals',
+    benefits: [
+      'All benefits of Jordan Mills',
+      'Automatically books AND schedules demos for top 2 opps per week',
+      'Provides full competitive intel in pre-demo notes',
+      'Auto-sends follow-up email after every hosted demo',
+      'Alerts player when a future opp is about to expire 5 days early',
+    ],
+    closeRateModifier: 0.12,
+    autoActions: ['dailyReminder', 'richNotes', 'riskFlags', 'autoBookDemo', 'prepEmails', 'autoFutureCall', 'autoBookTop2', 'competitiveIntel', 'autoFollowUp', 'earlyExpiryAlert'],
+  },
+];
+
 export const STAGES = {
   PRE_DEMO:          'pre-demo',
   DEMO_SCHEDULED:    'demo-scheduled',
@@ -135,6 +196,66 @@ const FLAVOUR_NOTES = [
   { note: 'A multinational with centralised vendor sourcing. Procurement has the budget sign-off but needs IT to co-sign.', buyerProfile: 'procurement' },
 ];
 
+// ─── BDR note pools ───────────────────────────────────────────────────────────
+
+const TIMELINES = [
+  'Targeting a decision within 30 days',
+  'Hoping to deploy before end of Q2',
+  'Evaluating options over the next 60 days',
+  'Needs to be live before year-end',
+  'Decision expected by end of next month',
+  'Fast-track evaluation — 3-week window',
+  'No hard deadline but wants to move this quarter',
+  'Replacement decision — existing contract ends in 90 days',
+];
+
+const STAKEHOLDERS = {
+  finance:     ['CFO has final sign-off', 'Finance director holds the budget', 'Managing partner is the decision-maker'],
+  technical:   ['CTO is the decision-maker', 'VP Engineering co-signs all vendor decisions', 'Head of IT is the main contact'],
+  operations:  ['COO is championing internally', 'VP Ops is driving the evaluation', 'Operations director is the sponsor'],
+  procurement: ['Procurement lead runs the process', 'Vendor management team is evaluating', 'Procurement committee must approve (3 members)'],
+};
+
+const COMPETITORS = ['Zenith Solutions', 'CoreTech', 'BlueSky Platform', 'NexusOps', 'AlphaStream',
+  'Prismatic', 'Vantage Suite', 'ClearPath', 'Momentum CRM', 'Nextera Analytics'];
+
+function buildBdrNotes(value, buyerProfile) {
+  const budgetLow  = Math.round(value * 0.75 / 1000);
+  const budgetHigh = Math.round(value * 1.25 / 1000);
+  const stakePool  = STAKEHOLDERS[buyerProfile] || STAKEHOLDERS.operations;
+  const comp1      = randomFrom(COMPETITORS);
+  let comp2;
+  do { comp2 = randomFrom(COMPETITORS); } while (comp2 === comp1);
+  return {
+    budget:      `Budget range: $${budgetLow}k–$${budgetHigh}k (based on initial scoping call)`,
+    timeline:    randomFrom(TIMELINES),
+    stakeholder: randomFrom(stakePool),
+    competitive: `Also evaluating ${comp1} and ${comp2}`,
+  };
+}
+
+export function buildBookingEmailBody(opp, bdrTier, bdrName) {
+  if (bdrTier === 0) {
+    return `${opp.company} has requested a product demo.\n\nWe'd love to see a demo. Availability is flexible.\n\nBest,\n${opp.name}\n${opp.company}`;
+  }
+  let body = `${opp.flavourNote}\n\nWe'd love to see a demo. Availability is flexible.\n\nBest,\n${opp.name}\n${opp.company}`;
+  body += `\n\n--- ${bdrName}'s Notes ---`;
+  if (bdrTier === 1) {
+    body += `\nBasic qualification complete. Industry interest and general need confirmed.`;
+  }
+  if (bdrTier >= 2) {
+    const n = opp.bdrNotes || {};
+    if (n.budget)      body += `\n${n.budget}`;
+    if (n.timeline)    body += `\n${n.timeline}`;
+    if (n.stakeholder) body += `\nKey contact: ${n.stakeholder}`;
+  }
+  if (bdrTier >= 4) {
+    const n = opp.bdrNotes || {};
+    if (n.competitive) body += `\nCompetitive intel: ${n.competitive}`;
+  }
+  return body;
+}
+
 // ─── Urgency ──────────────────────────────────────────────────────────────────
 
 export function calcUrgency(opp, dayNumber) {
@@ -216,6 +337,8 @@ export function generateOpportunity(gameState) {
     liveCalledDay:       null,
     futureExpiry:        null,
 
+    bdrNotes: buildBdrNotes(value, flavour.buyerProfile),
+
     urgency: 'green',
     log: [`${formatDate(gameState.date)}: Inbound booking received`],
   };
@@ -245,6 +368,16 @@ export function createInitialState() {
 
     gameOver:           false,
     gameOverReason:     null,
+
+    employeeId:         String(Math.floor(100000 + Math.random() * 900000)),
+    avatarIndex:        0,
+
+    activeBDR:          null,
+    availableBDRs:      ['none'],
+    bdrUnlockLog:       [],
+    q1AboveQuota:       false,
+    q2AboveQuota:       false,
+    pendingBDRReminder: false,
   };
 }
 
@@ -315,6 +448,16 @@ export function actionHostDemo(state, oppId, miniGameScore) {
         type: 'task',
         oppId,
       }));
+      // BDR auto follow-up
+      const followBdr = getActiveBDR(draft);
+      if (followBdr.autoActions.includes('autoFollowUp')) {
+        draft.emails.push(makeEmail({
+          from: `BDR — ${followBdr.name}`,
+          subject: `Follow-up sent to ${opp.company}`,
+          body: `I've sent a recap email to ${opp.name} at ${opp.company} covering key demo takeaways and asking about next steps.\n\n— ${followBdr.name}`,
+          time: formatDate(draft.date), type: 'bdr', oppId,
+        }));
+      }
     }
   };
 }
@@ -414,7 +557,9 @@ export function actionCloseCall(state, oppId, miniGameScore) {
   if (state.actionsRemaining <= 0)       return { success: false, message: 'No actions remaining today.' };
 
   const probAdjust = miniGameScore >= 80 ? 15 : miniGameScore >= 50 ? 5 : -10;
-  const finalProb  = Math.max(5, Math.min(95, opp.prob + probAdjust));
+  const bdrEntry   = getActiveBDR(state);
+  const bdrMod     = Math.round((bdrEntry.closeRateModifier || 0) * 100);
+  const finalProb  = Math.max(5, Math.min(95, opp.prob + probAdjust + bdrMod));
   const roll       = Math.random() * 100;
 
   let outcome;
@@ -463,6 +608,33 @@ export function actionCloseCall(state, oppId, miniGameScore) {
           time: formatDate(draft.date), type: 'info', oppId,
         }));
       }
+    }
+  };
+}
+
+export function actionTouchBase(state, oppId) {
+  const opp = state.opportunities.find(o => o.id === oppId);
+  if (!opp)                           return { success: false, message: 'Opportunity not found.' };
+  if (state.actionsRemaining <= 0)    return { success: false, message: 'No actions remaining today.' };
+
+  const messages = [
+    `Left a voicemail for ${opp.name}. They sounded engaged.`,
+    `Sent a quick check-in to ${opp.name}. Waiting to hear back.`,
+    `Had a brief chat with ${opp.name} — everything still on track.`,
+    `Touched base with ${opp.name} at ${opp.company}. They're looking forward to it.`,
+    `Brief conversation with ${opp.name}. Confirmed interest.`,
+    `${opp.name} confirmed they're still evaluating. Good to stay top of mind.`,
+  ];
+  const msg = messages[Math.floor(Math.random() * messages.length)];
+
+  return {
+    success: true,
+    message: msg,
+    apply(draft) {
+      const o = draft.opportunities.find(x => x.id === oppId);
+      o.log.push(`${formatDate(draft.date)}: Touch base call`);
+      draft.actionsRemaining--;
+      draft.actionsUsedToday++;
     }
   };
 }
@@ -538,6 +710,29 @@ export function advanceDay(state) {
           body: `You hit quota all 3 months of Q${prevDate.quarter}. Your monthly quota for Q${quarter} has increased to $${draft.quota.toLocaleString()}.\n\nKeep it up!\n\nDave`,
           time: formatDate(draft.date), type: 'manager',
         }));
+        // BDR unlocks on full quota completion
+        if (prevDate.quarter === 1 && !draft.availableBDRs.includes('senior')) {
+          draft.q1AboveQuota = true;
+          draft.availableBDRs.push('senior');
+          draft.bdrUnlockLog.push({ day: today, bdrId: 'senior' });
+          draft.emails.push(makeEmail({
+            from: 'HR System',
+            subject: 'New BDR available — Q1 quota bonus',
+            body: `Congratulations on hitting all 3 months of Q1!\n\nJordan Mills (Senior BDR) is now available for your territory. Visit the BDR panel to upgrade your team.\n\nHR System`,
+            time: formatDate(draft.date), type: 'manager',
+          }));
+        }
+        if (prevDate.quarter === 2 && !draft.availableBDRs.includes('elite')) {
+          draft.q2AboveQuota = true;
+          draft.availableBDRs.push('elite');
+          draft.bdrUnlockLog.push({ day: today, bdrId: 'elite' });
+          draft.emails.push(makeEmail({
+            from: 'HR System',
+            subject: 'New BDR available — Q2 quota bonus',
+            body: `Outstanding — Q2 quota hit all 3 months!\n\nSam Rivera (Elite BDR) is now available for your territory. Visit the BDR panel.\n\nHR System`,
+            time: formatDate(draft.date), type: 'manager',
+          }));
+        }
       }
       draft.quarterMonthHits = [false, false, false];
     }
@@ -624,6 +819,17 @@ export function advanceDay(state) {
         body: `${o.name} at ${o.company} will expire from your futures book in 14 days (${formatDate(dayNumberToDate(o.futureExpiry))}).\n\nMake a rebook call soon.`,
         time: formatDate(draft.date), type: 'risk', oppId: o.id }));
     }
+    // BDR early expiry alert (5 days — Sam Rivera only)
+    if (o.stage === STAGES.FUTURE && (o.futureExpiry - today) === 5 && !o._earlyAlertSent) {
+      const earlyBdr = getActiveBDR(draft);
+      if (earlyBdr.autoActions.includes('earlyExpiryAlert')) {
+        o._earlyAlertSent = true;
+        draft.emails.push(makeEmail({ from: `BDR — ${earlyBdr.name}`,
+          subject: `[5 DAYS] ${o.company} expires soon`,
+          body: `${o.name} at ${o.company} will fall out of your futures book in just 5 days.\n\nI'd recommend making your rebook call today.\n\n— ${earlyBdr.name}`,
+          time: formatDate(draft.date), type: 'bdr', oppId: o.id }));
+      }
+    }
   });
 
   // ── New inbound bookings ──
@@ -635,10 +841,11 @@ export function advanceDay(state) {
   for (let i = 0; i < newBookings; i++) {
     const opp = generateOpportunity(draft);
     draft.opportunities.push(opp);
+    const bkBdr = getActiveBDR(draft);
     draft.emails.push(makeEmail({
       from:       opp.name + ' — ' + opp.company,
       subject:    `New demo request — ${opp.company}`,
-      body:       `Hi,\n\n${opp.flavourNote}\n\nWe'd love to see a demo. We have availability over the next few days.\n\nBest,\n${opp.name}\n${opp.company}`,
+      body:       `Hi,\n\n${buildBookingEmailBody(opp, bkBdr.tier, bkBdr.name)}`,
       time:       formatDate(draft.date),
       type:       'task',
       oppId:      opp.id,
@@ -664,6 +871,101 @@ export function advanceDay(state) {
       body:    `Hey,\n\n${msg}\n\nActive opps: ${draft.opportunities.filter(o => ![STAGES.WON, STAGES.LOST].includes(o.stage)).length}\nWon this month: $${draft.monthRevenue.toLocaleString()} of $${draft.quota.toLocaleString()}\n\nTalk soon,\nDave`,
       time:    formatDate(draft.date), type: 'manager',
     }));
+  }
+
+  // ── BDR day-based unlock checks ──
+  if (today === 5 && !draft.availableBDRs.includes('basic')) {
+    draft.availableBDRs.push('basic');
+    draft.bdrUnlockLog.push({ day: today, bdrId: 'basic' });
+    draft.emails.push(makeEmail({
+      from: 'HR System',
+      subject: 'A BDR has been assigned to your territory',
+      body: `A Business Development Rep has been assigned to your territory.\n\nVisit the BDR panel in the header to get started. You can review available reps, check their benefits, and assign one to your account.\n\nHR System`,
+      time: formatDate(draft.date), type: 'manager',
+    }));
+  }
+  if (today === 20 && !draft.availableBDRs.includes('standard')) {
+    draft.availableBDRs.push('standard');
+    draft.bdrUnlockLog.push({ day: today, bdrId: 'standard' });
+    draft.emails.push(makeEmail({
+      from: 'HR System',
+      subject: 'Alex Chen is now available for hire',
+      body: `Month 1 complete! Alex Chen (Junior BDR) is now available for your territory.\n\nAlex is a step up from Casey — neutral close rate impact and richer buyer intel.\n\nVisit the BDR panel to hire.\n\nHR System`,
+      time: formatDate(draft.date), type: 'manager',
+    }));
+  }
+
+  // ── BDR Monday actions ──
+  if (draft.date.day === 1) {
+    const mondayBdr = getActiveBDR(draft);
+    const bdrActs   = mondayBdr.autoActions;
+
+    // Daily reminder flag (consumed in main.js)
+    if (bdrActs.includes('dailyReminder')) {
+      draft.pendingBDRReminder = true;
+    }
+
+    // Auto-book demos (Jordan: top 1, Sam: top 2)
+    if (bdrActs.includes('autoBookDemo')) {
+      const limit    = bdrActs.includes('autoBookTop2') ? 2 : 1;
+      const toBook   = draft.opportunities
+        .filter(o => o.stage === STAGES.PRE_DEMO && o.scheduleBy >= today)
+        .sort((a, b) => b.value - a.value)
+        .slice(0, limit);
+      toBook.forEach(o => {
+        const demoDay = today + 3;
+        o.stage   = STAGES.DEMO_SCHEDULED;
+        o.demoDay = demoDay;
+        o.log.push(`${formatDate(draft.date)}: Demo auto-booked by ${mondayBdr.name} for ${formatDate(dayNumberToDate(demoDay))}`);
+        draft.calendarEvents.push({ day: demoDay, oppId: o.id, type: 'demo' });
+        draft.emails.push(makeEmail({
+          from: `BDR — ${mondayBdr.name}`,
+          subject: `Demo booked — ${o.company}`,
+          body: `I've booked a demo with ${o.name} at ${o.company} for ${formatDate(dayNumberToDate(demoDay))}.\n\nI'll make sure they come prepared.\n\n— ${mondayBdr.name}`,
+          time: formatDate(draft.date), type: 'bdr', oppId: o.id,
+        }));
+      });
+    }
+
+    // Auto future call (Jordan+)
+    if (bdrActs.includes('autoFutureCall')) {
+      const futureOpp = draft.opportunities.find(o => o.stage === STAGES.FUTURE && today <= o.futureExpiry);
+      if (futureOpp) {
+        futureOpp.futureExpiry = Math.min(futureOpp.futureExpiry + 5, today + FUTURE_REBOOK_WINDOW);
+        draft.emails.push(makeEmail({
+          from: `BDR — ${mondayBdr.name}`,
+          subject: `Checked in with ${futureOpp.company}`,
+          body: `I called ${futureOpp.name} at ${futureOpp.company} to keep the relationship warm. They're still interested — I extended their window by 5 days.\n\n— ${mondayBdr.name}`,
+          time: formatDate(draft.date), type: 'bdr', oppId: futureOpp.id,
+        }));
+      }
+    }
+  }
+
+  // ── BDR prep emails (1 day before scheduled demos) ──
+  {
+    const prepBdr = getActiveBDR(draft);
+    if (prepBdr.autoActions.includes('prepEmails')) {
+      draft.opportunities
+        .filter(o => o.stage === STAGES.DEMO_SCHEDULED && o.demoDay === today + 1 && !o._prepSent)
+        .forEach(o => {
+          o._prepSent = true;
+          let prepBody = `Demo with ${o.name} at ${o.company} is tomorrow (${formatDate(dayNumberToDate(o.demoDay))}).\n\nBuyer profile: ${o.buyerProfile}\n${o.flavourNote}`;
+          if (prepBdr.tier >= 2 && o.bdrNotes) {
+            prepBody += `\n\nAdditional intel:\n${o.bdrNotes.budget}\n${o.bdrNotes.timeline}\nKey contact: ${o.bdrNotes.stakeholder}`;
+          }
+          if (prepBdr.tier >= 4 && o.bdrNotes) {
+            prepBody += `\nCompetitive: ${o.bdrNotes.competitive}`;
+          }
+          prepBody += `\n\nGood luck!\n— ${prepBdr.name}`;
+          draft.emails.push(makeEmail({
+            from: `BDR — ${prepBdr.name}`,
+            subject: `Demo prep — ${o.company} (tomorrow)`,
+            body: prepBody,
+            time: formatDate(draft.date), type: 'bdr', oppId: o.id,
+          }));
+        });
+    }
   }
 
   // ── Occasional spam (~every 3 days) ──
@@ -715,6 +1017,15 @@ export function getPipelineSummary(state) {
     byStage:        Object.values(STAGES).reduce((acc, s) => { acc[s] = active.filter(o => o.stage === s).length; return acc; }, {}),
     projectedValue: active.filter(o => o.demoHostedDay !== null).reduce((sum, o) => sum + Math.round(o.value * o.prob / 100), 0),
   };
+}
+
+export function getActiveBDR(state) {
+  const id = state.activeBDR || 'none';
+  return BDR_ROSTER.find(b => b.id === id) || BDR_ROSTER[0];
+}
+
+export function getBDRTier(state) {
+  return getActiveBDR(state).tier;
 }
 
 export function getNextQuarterQuota(state) {

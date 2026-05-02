@@ -27,6 +27,7 @@
       <span class="day-label" id="header-date">Q1·M1·W1·D1</span>
       <button onclick="nextDay()">End day &#8594;</button>
     </div>
+    <button class="btn btn-sm" onclick="window.openBDRPanel()" id="bdr-btn">BDR</button>
     <button class="btn btn-sm" onclick="newGame()">New game</button>
   </div>
 </header>
@@ -50,9 +51,12 @@
       <span class="badge" id="email-unread-badge">0 unread</span>
     </div>
     <div class="inbox-split">
-      <div class="inbox-list" id="inbox-list"></div>
+      <div class="inbox-list-col">
+        <div class="inbox-list" id="inbox-list"></div>
+        <div id="inbox-older" class="inbox-older-count" style="display:none"></div>
+      </div>
       <div class="inbox-body" id="inbox-body">
-        <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-style:italic;font-size:13px">Select an email to read</div>
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;color:#808080;font-style:italic;font-size:11px;font-family:Arial,sans-serif;background:#ffffff">[ Select an email to read ]</div>
       </div>
     </div>
   </section>
@@ -61,11 +65,8 @@
   <section class="panel panel-phone">
     <div class="panel-header">
       <span class="panel-title">Phone</span>
-      <span class="panel-meta">Click an opportunity to call</span>
     </div>
-    <div class="phone-body">
-      <div id="call-list"></div>
-    </div>
+    <div class="phone-body" id="phone-body"></div>
   </section>
 
   <!-- Pipeline — Kanban only -->
@@ -82,7 +83,7 @@
 <footer class="stats-footer">
   <div class="stat-card">
     <div class="stat-label">Won this month</div>
-    <div class="stat-val" id="stat-won" style="color:#1D9E75">$0</div>
+    <div class="stat-val" id="stat-won" style="color:#00aa00">$0</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Active opps</div>
@@ -117,6 +118,8 @@
     <div class="modal-buttons" id="modal-buttons"></div>
   </div>
 </div>
+
+<div id="id-card" class="id-card"></div>
 
 <script type="module" src="js/main.js"></script>
 </body>
