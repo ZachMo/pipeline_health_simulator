@@ -1,0 +1,497 @@
+/* ── Reset & base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #ffffff;
+  --bg2:     #f5f5f3;
+  --bg3:     #efefec;
+  --border:  rgba(0,0,0,0.10);
+  --border2: rgba(0,0,0,0.18);
+  --text:    #1a1a18;
+  --text2:   #6b6b67;
+  --text3:   #a0a09c;
+  --radius:  8px;
+  --radius-lg: 12px;
+  --blue:    #378ADD;
+  --blue-bg: #E6F1FB;
+  --green:   #1D9E75;
+  --red:     #E24B4A;
+  --amber:   #EF9F27;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:      #1c1c1a;
+    --bg2:     #252523;
+    --bg3:     #2e2e2b;
+    --border:  rgba(255,255,255,0.10);
+    --border2: rgba(255,255,255,0.18);
+    --text:    #e8e8e4;
+    --text2:   #9a9a96;
+    --text3:   #6a6a66;
+    --blue-bg: #0c2a44;
+  }
+}
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg3);
+  line-height: 1.5;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────────── */
+.btn {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: 0.5px solid var(--border2);
+  background: var(--bg);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: inherit;
+  transition: background .12s;
+  white-space: nowrap;
+  min-height: 32px;
+}
+.btn:hover  { background: var(--bg2); }
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+.btn-primary:hover { background: #185FA5; }
+.btn-sm { padding: 4px 9px; font-size: 11px; min-height: 28px; }
+
+/* ── Badge ──────────────────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+  background: var(--bg2);
+  color: var(--text2);
+}
+
+/* ── Panel ──────────────────────────────────────────────────────────────────── */
+.panel {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.panel-header {
+  padding: 9px 14px;
+  border-bottom: 0.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.panel-title {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text2);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.panel-meta { font-size: 11px; color: var(--text3); }
+
+/* ── App header ─────────────────────────────────────────────────────────────── */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg);
+  border-bottom: 0.5px solid var(--border);
+  flex-wrap: wrap;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header-left  { display: flex; align-items: center; gap: 12px; }
+.app-title    { font-size: 15px; font-weight: 500; }
+.header-season { font-size: 11px; color: var(--text2); }
+.header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.quota-block     { display: flex; align-items: center; gap: 6px; }
+.quota-label     { font-size: 11px; color: var(--text2); }
+.quota-bar-wrap  { width: 100px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.quota-bar       { height: 100%; border-radius: 3px; transition: width .4s, background .4s; }
+.quota-text      { font-size: 11px; color: var(--text2); min-width: 70px; }
+
+.day-nav        { display: flex; align-items: center; gap: 6px; }
+.day-nav button { padding: 4px 10px; font-size: 11px; border-radius: var(--radius); border: 0.5px solid var(--border2); background: var(--bg); cursor: pointer; color: var(--text); font-family: inherit; min-height: 28px; }
+.day-nav button:hover { background: var(--bg2); }
+.day-label      { font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ── Main grid ──────────────────────────────────────────────────────────────── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  grid-template-rows: auto auto;
+  gap: 10px;
+  padding: 10px 16px;
+}
+.panel-calendar { grid-column: 1; grid-row: 1; }
+.panel-inbox    { grid-column: 2; grid-row: 1 / span 2; }
+.panel-phone    { grid-column: 1; grid-row: 2; }
+.panel-pipeline { grid-column: 1 / span 2; grid-row: 3; }
+
+/* ── Calendar grid ──────────────────────────────────────────────────────────── */
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 10px;
+}
+
+/* ── Inbox — Outlook split panel ────────────────────────────────────────────── */
+.inbox-split {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 360px;
+}
+
+.inbox-list {
+  width: 38%;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 0.5px solid var(--border);
+}
+
+.inbox-list-item {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 0.5px solid var(--border);
+  cursor: pointer;
+  align-items: flex-start;
+  transition: background .1s;
+  min-height: 44px;
+}
+.inbox-list-item:hover    { background: var(--bg2); }
+.inbox-list-item.selected { background: var(--blue-bg); }
+
+.inbox-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ── Phone ──────────────────────────────────────────────────────────────────── */
+.phone-body { padding: 12px 14px; }
+
+/* ── Pipeline — Kanban ──────────────────────────────────────────────────────── */
+.kanban-scroll { overflow-x: auto; flex: 1; }
+.kanban-board  {
+  display: flex;
+  min-width: 600px;
+  padding: 10px;
+  gap: 0;
+}
+.kanban-col {
+  flex: 1;
+  border-right: 0.5px solid var(--border);
+  padding: 0 8px 8px;
+  min-width: 90px;
+}
+.kanban-col:last-child { border-right: none; }
+.kanban-col-header {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 8px 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Stats footer ───────────────────────────────────────────────────────────── */
+.stats-footer {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  padding: 10px 16px 16px;
+}
+.stat-card {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.stat-label { font-size: 10px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; }
+.stat-val   { font-size: 20px; font-weight: 500; }
+
+/* ── Modal ──────────────────────────────────────────────────────────────────── */
+.modal-wrap {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.modal-box {
+  background: var(--bg);
+  border-radius: var(--radius-lg);
+  border: 0.5px solid var(--border2);
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.modal-box.modal-mini {
+  max-width: 90vw;
+  max-height: 90vh;
+  width: 760px;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 0.5px solid var(--border);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+.modal-title   { font-size: 14px; font-weight: 600; }
+.modal-body    { padding: 16px; flex: 1; overflow-y: auto; }
+.modal-buttons {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 0.5px solid var(--border);
+  justify-content: flex-end;
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+}
+
+/* ── Slide picker mini-game ─────────────────────────────────────────────────── */
+.slide-picker-wrap { display: flex; flex-direction: column; gap: 0; }
+
+.buyer-brief {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 4px;
+}
+.buyer-brief-role    { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.buyer-brief-desc    { font-size: 12px; color: var(--text2); line-height: 1.5; }
+.buyer-brief-label   { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text3); margin-bottom: 4px; }
+.buyer-brief-item    { font-size: 12px; color: var(--text2); line-height: 1.5; }
+.buyer-brief-col     { flex: 1; min-width: 140px; }
+
+.slide-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.slide-card {
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 10px 8px;
+  cursor: pointer;
+  text-align: center;
+  position: relative;
+  transition: border-color .15s, background .15s;
+  background: var(--bg);
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.slide-card:hover  { border-color: var(--blue); background: var(--blue-bg); }
+.slide-card.picked { border-color: var(--blue); background: var(--blue-bg); }
+
+.slide-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.slide-icon  { font-size: 20px; }
+.slide-title { font-size: 11px; font-weight: 600; line-height: 1.3; }
+.slide-desc  { font-size: 10px; color: var(--text2); line-height: 1.3; }
+
+.slide-result-row {
+  padding: 10px 0;
+  border-bottom: 0.5px solid var(--border);
+}
+.slide-result-row:last-child { border-bottom: none; }
+
+/* ── Deal or No Deal ────────────────────────────────────────────────────────── */
+.dond-wrap { }
+.dond-info { font-size: 13px; color: var(--text2); }
+.dond-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+.dond-case {
+  transition: transform .1s;
+}
+.dond-case:hover { transform: scale(1.05); }
+
+/* ── Dialogue matcher ───────────────────────────────────────────────────────── */
+.dialogue-wrap { display: flex; flex-direction: column; gap: 4px; }
+
+.dialogue-buyer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 0.5px solid var(--border);
+  margin-bottom: 4px;
+}
+.dialogue-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.dialogue-bubble {
+  background: var(--bg2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  max-width: 90%;
+}
+.dialogue-bubble.opener { font-size: 12px; color: var(--text2); font-style: italic; }
+.dialogue-bubble.buyer  { background: var(--bg2); }
+
+.dialogue-feedback {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+}
+.dialogue-feedback.correct { color: #27500A; background: #EAF3DE; }
+.dialogue-feedback.wrong   { color: #791F1F; background: #FCEBEB; }
+
+.dialogue-options { display: flex; flex-direction: column; gap: 8px; }
+.dialogue-opt {
+  border: 0.5px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.dialogue-opt:hover { background: var(--bg2); border-color: var(--blue); }
+
+/* ── Toast ──────────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: #1a1a18;
+  color: #fff;
+  font-size: 13px;
+  padding: 10px 20px;
+  border-radius: 20px;
+  opacity: 0;
+  transition: opacity .25s, transform .25s;
+  pointer-events: none;
+  z-index: 200;
+  white-space: nowrap;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── Mobile — 768px ─────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  html, body { font-size: 13px; }
+
+  .app-header { padding: 8px 12px; }
+  .app-title  { font-size: 14px; }
+  .quota-bar-wrap { width: 70px; }
+  .header-season { display: none; }
+
+  .main-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .panel-calendar { grid-column: 1; grid-row: 1; }
+  .panel-inbox    { grid-column: 1; grid-row: 2; }
+  .panel-phone    { grid-column: 1; grid-row: 3; }
+  .panel-pipeline { grid-column: 1; grid-row: 4; }
+
+  /* Inbox: on mobile show only list until email tapped */
+  .inbox-split { min-height: 280px; }
+  .inbox-body  { display: none; }
+
+  /* When email opened on mobile: full-screen overlay */
+  .panel-inbox.mobile-email-open .inbox-list { display: none; }
+  .panel-inbox.mobile-email-open .inbox-body {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+  .mobile-back-btn { display: block !important; }
+
+  .stats-footer { grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 10px 12px; }
+  .stat-val     { font-size: 18px; }
+
+  .modal-wrap  { padding: 0; align-items: flex-end; }
+  .modal-box   { border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 95vh; max-width: 100%; }
+  .modal-box.modal-mini { max-width: 100%; width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; max-height: 95vh; }
+
+  .slide-grid { grid-template-columns: repeat(3, 1fr); }
+  .dond-grid  { grid-template-columns: repeat(4, 1fr); }
+  .kanban-board { padding: 8px 6px; }
+  .kanban-col   { padding: 0 5px 6px; min-width: 80px; }
+}
+
+@media (max-width: 480px) {
+  .slide-grid { grid-template-columns: repeat(2, 1fr); }
+  .dond-grid  { grid-template-columns: repeat(3, 1fr); }
+  .stats-footer { grid-template-columns: 1fr 1fr; }
+}

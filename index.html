@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Rep Simulator</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header class="app-header">
+  <div class="header-left">
+    <span class="app-title">Sales rep simulator</span>
+    <span class="header-season" id="header-season"></span>
+  </div>
+  <div class="header-right">
+    <div class="quota-block">
+      <span class="quota-label">Monthly quota</span>
+      <div class="quota-bar-wrap">
+        <div class="quota-bar" id="quota-bar" style="width:0%"></div>
+      </div>
+      <span class="quota-text" id="quota-pct">$0 / $80k</span>
+    </div>
+    <div class="day-nav">
+      <button onclick="prevDay()">&#8592;</button>
+      <span class="day-label" id="header-date">Q1·M1·W1·D1</span>
+      <button onclick="nextDay()">End day &#8594;</button>
+    </div>
+    <button class="btn btn-sm" onclick="newGame()">New game</button>
+  </div>
+</header>
+
+<!-- ── Main grid ──────────────────────────────────────────────────────────── -->
+<main class="main-grid">
+
+  <!-- Calendar -->
+  <section class="panel panel-calendar">
+    <div class="panel-header">
+      <span class="panel-title">Calendar</span>
+      <span class="panel-meta" id="cal-week-label"></span>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+  </section>
+
+  <!-- Inbox — Outlook split panel -->
+  <section class="panel panel-inbox" id="panel-inbox">
+    <div class="panel-header">
+      <span class="panel-title">Inbox</span>
+      <span class="badge" id="email-unread-badge">0 unread</span>
+    </div>
+    <div class="inbox-split">
+      <div class="inbox-list" id="inbox-list"></div>
+      <div class="inbox-body" id="inbox-body">
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-style:italic;font-size:13px">Select an email to read</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Phone -->
+  <section class="panel panel-phone">
+    <div class="panel-header">
+      <span class="panel-title">Phone</span>
+      <span class="panel-meta">Click an opportunity to call</span>
+    </div>
+    <div class="phone-body">
+      <div id="call-list"></div>
+    </div>
+  </section>
+
+  <!-- Pipeline — Kanban only -->
+  <section class="panel panel-pipeline">
+    <div class="panel-header">
+      <span class="panel-title">Pipeline</span>
+    </div>
+    <div id="pipe-kanban"></div>
+  </section>
+
+</main>
+
+<!-- ── Stats footer ───────────────────────────────────────────────────────── -->
+<footer class="stats-footer">
+  <div class="stat-card">
+    <div class="stat-label">Won this month</div>
+    <div class="stat-val" id="stat-won" style="color:#1D9E75">$0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Active opps</div>
+    <div class="stat-val" id="stat-active">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Urgent</div>
+    <div class="stat-val" id="stat-urgent">0</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Attainment</div>
+    <div class="stat-val" id="stat-pct">0%</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Monthly quota</div>
+    <div class="stat-val" id="stat-quota">$80k</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Next Q quota</div>
+    <div class="stat-val" id="stat-nextq">$80k</div>
+  </div>
+</footer>
+
+<!-- ── Modal overlay ──────────────────────────────────────────────────────── -->
+<div class="modal-wrap" id="modal-wrap" style="display:none">
+  <div class="modal-box" id="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title"></span>
+      <button class="btn btn-sm" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-buttons" id="modal-buttons"></div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
