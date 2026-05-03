@@ -7,9 +7,10 @@ import {
   createInitialState, advanceDay, saveState, loadState, clearState,
   generateOpportunity, STAGES, ACTIONS_PER_DAY,
   actionScheduleDemo, actionHostDemo, actionSchedulePricing,
-  actionBuildProposal, actionHostPricing, actionCloseCall, actionRebookCall, actionTouchBase,
+  actionBuildProposal, actionHostPricing, actionCloseCall, actionRebookCall,
+  actionTouchBase, actionBuyerWalkaway, actionSubmitForecast,
   getActiveOpps, formatDate, dayNumberToDate, nextEmailId,
-  BDR_ROSTER, getActiveBDR,
+  BDR_ROSTER, getActiveBDR, hasSkill, SKILL_TREE, BUYER_PERSONALITIES,
 } from './engine.js';
 
 import {
@@ -18,14 +19,15 @@ import {
   showModal, closeModal,
 } from './ui.js';
 
-import {
-  CLOSE_DIALOGUES, REBOOK_DIALOGUES, BUYER_PROFILES, SLIDES, SLIDE_REACTIONS,
-} from './dialogues.js';
+import { CLOSE_DIALOGUES, REBOOK_DIALOGUES } from './dialogues.js';
+import { SLIDE_POOL, BUYER_PROFILES, scoreSlide } from './slides.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-let state     = null;
-let _phoneTab = 'contacts';
+let state              = null;
+let _phoneTab          = 'contacts';
+let _expandedContactId = null;
+let _pbTimerInterval   = null; // proposal builder timer handle
 
 // ─── Full render ──────────────────────────────────────────────────────────────
 
@@ -34,7 +36,7 @@ function renderAll() {
   renderCalendar(state, handleCalendarEvent);
   renderEmails(state, handleEmailSelect);
   renderEmailBody(state, _currentEmailId, handleEmailAction);
-  renderPhone(state, handleCallClick, handleContactClick, _phoneTab);
+  renderPhone(state, handleCallClick, handleContactCall, _phoneTab, _expandedContactId);
   renderPipeline(state, handleKanbanClick);
   renderStats(state);
   renderIdCard(state);
@@ -120,8 +122,14 @@ function showEventDetails(opp, type) {
 // ─── Phone handler ────────────────────────────────────────────────────────────
 
 window._setPhoneTab = function(tab) {
-  _phoneTab = tab;
-  renderPhone(state, handleCallClick, handleContactClick, _phoneTab);
+  _phoneTab          = tab;
+  _expandedContactId = null;
+  renderPhone(state, handleCallClick, handleContactCall, _phoneTab, _expandedContactId);
+};
+
+window._onContactClick = function(oppId) {
+  _expandedContactId = (_expandedContactId === oppId) ? null : oppId;
+  renderPhone(state, handleCallClick, handleContactCall, _phoneTab, _expandedContactId);
 };
 
 function handleCallClick(oppId) {
@@ -135,69 +143,59 @@ function handleCallClick(oppId) {
   launchDialogueMatcher(opp);
 }
 
-function handleContactClick(oppId) {
+function handleContactCall(oppId) {
   const opp = state.opportunities.find(o => o.id === oppId);
   if (!opp) return;
-
-  if (opp.stage === STAGES.LIVE_CALL || opp.stage === STAGES.FUTURE) {
-    handleCallClick(oppId);
+  if (state.actionsRemaining <= 0) {
+    showModal('No actions left', '<p style="font-size:13px">No actions remaining today.</p>',
+      [{ label: 'OK', onclick: 'window.closeModal()' }]);
     return;
   }
-
-  const bdrTier = getActiveBDR(state).tier;
-  const notes   = opp.bdrNotes || {};
-
-  let demoLine = '';
-  if (opp.demoDay !== null) {
-    demoLine = `<div style="font-size:11px;font-family:Arial,sans-serif;color:#000080;margin-bottom:8px;padding:3px 6px;border:1px solid #000080;display:inline-block">
-      See you on ${formatDate(dayNumberToDate(opp.demoDay))}
-    </div>`;
+  if (opp.stage === STAGES.LIVE_CALL || opp.stage === STAGES.FUTURE) {
+    launchDialogueMatcher(opp);
+    return;
+  }
+  let msg;
+  if (opp.stage === STAGES.PRE_DEMO || opp.stage === STAGES.DEMO_SCHEDULED) {
+    const demoRef = opp.demoDay !== null
+      ? `See you on ${formatDate(dayNumberToDate(opp.demoDay))}.`
+      : 'No demo date confirmed yet.';
+    const snippet = opp.flavourNote ? opp.flavourNote.split('.')[0] + '.' : 'They confirmed interest.';
+    msg = `${opp.name} confirmed they're looking forward to the demo. They mentioned: "${snippet}" ${demoRef}`;
   } else {
-    demoLine = `<div style="font-size:11px;font-family:Arial,sans-serif;color:#808080;margin-bottom:8px">No demo scheduled yet</div>`;
+    msg = `${opp.name} is aware of the upcoming pricing meeting. They asked that you come prepared with clear numbers.`;
   }
-
-  let notesHtml = `<div style="background:#ffffff;border:2px solid;border-color:#808080 #ffffff #ffffff #808080;padding:8px;margin-bottom:10px">
-    <div style="font-size:9px;font-family:Arial,sans-serif;font-weight:bold;color:#000080;letter-spacing:.05em;margin-bottom:4px">BUYER NOTES</div>
-    <div style="font-size:11px;font-family:Arial,sans-serif;color:#404040;line-height:1.6;margin-bottom:4px">${opp.flavourNote || '—'}</div>`;
-  if (bdrTier >= 1) {
-    notesHtml += `<div style="font-size:10px;font-family:Arial,sans-serif;color:#808080;font-style:italic">Basic qualification complete.</div>`;
+  const result = actionTouchBase(state, oppId);
+  if (result.success) {
+    result.apply(state);
+    renderAll();
+    showModal(`📞 Call — ${opp.name}`,
+      `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.7;color:#000000">${msg}</div>`,
+      [{ label: 'OK', onclick: 'window.closeModal()' }]);
   }
-  if (bdrTier >= 2 && notes.budget) {
-    notesHtml += `<div style="margin-top:6px;font-size:10px;font-family:'Courier New',monospace;color:#000000;line-height:1.7">
-      ${notes.budget}<br>${notes.timeline}<br>Key contact: ${notes.stakeholder}
-    </div>`;
-  }
-  if (bdrTier >= 4 && notes.competitive) {
-    notesHtml += `<div style="font-size:10px;font-family:'Courier New',monospace;color:#000000">Competitive: ${notes.competitive}</div>`;
-  }
-  notesHtml += `</div>`;
-
-  const canTouch = state.actionsRemaining > 0;
-  const buttons  = [
-    canTouch
-      ? { label: 'Touch base (1 action)', primary: true, onclick: `window._contactTouchBase(${opp.id})` }
-      : { label: 'No actions left', onclick: 'window.closeModal()' },
-    { label: 'Close', onclick: 'window.closeModal()' },
-  ];
-
-  showModal(
-    `${opp.name} — ${opp.company}`,
-    `${demoLine}${notesHtml}`,
-    buttons
-  );
-
-  window._contactTouchBase = (id) => {
-    const result = actionTouchBase(state, id);
-    if (result.success) {
-      result.apply(state);
-      closeModal();
-      renderAll();
-      setTimeout(() => showToast(result.message), 200);
-    } else {
-      alert(result.message);
-    }
-  };
 }
+
+// Pipeline forecast submit
+window._onForecastSubmit = function(emailId) {
+  const activeOpps = state.opportunities.filter(o =>
+    o.stage !== STAGES.WON && o.stage !== STAGES.LOST
+  );
+  const submissions = {};
+  activeOpps.forEach(o => {
+    const sel = document.getElementById(`fcst-${o.id}`);
+    if (sel) submissions[o.id] = parseInt(sel.value);
+  });
+  const result = actionSubmitForecast(state, submissions);
+  if (result.success) {
+    result.apply(state);
+    renderAll();
+    if (_currentEmailId === emailId) renderEmailBody(state, emailId, handleEmailAction);
+    showToast('Forecast submitted. Thanks, says Dave.');
+  } else {
+    showModal('No actions left', '<p style="font-size:13px">No actions remaining today.</p>',
+      [{ label: 'OK', onclick: 'window.closeModal()' }]);
+  }
+};
 
 // ─── Kanban click handler ─────────────────────────────────────────────────────
 
@@ -303,7 +301,45 @@ function showSchedulePricingModal(opp) {
   };
 }
 
-// ─── Proposal builder mini-modal ──────────────────────────────────────────────
+// ─── Proposal builder mini-game (maths challenge) ────────────────────────────
+
+function _generateProblems(n) {
+  return Array.from({ length: n }, (_, k) => {
+    const level = k < 3 ? 'easy' : k < 7 ? 'medium' : 'hard';
+    let a, b, answer, label, distOffsets;
+    if (level === 'easy') {
+      a = 15 + Math.floor(Math.random() * 35);
+      b = 15 + Math.floor(Math.random() * 35);
+      answer = a + b;
+      label  = `${a} + ${b}`;
+      distOffsets = [3, 5, 8, 10, 13, 16];
+    } else if (level === 'medium') {
+      a = 4 + Math.floor(Math.random() * 6);
+      b = 12 + Math.floor(Math.random() * 15);
+      answer = a * b;
+      label  = `${a} × ${b}`;
+      distOffsets = [a, b, a * 2, a + b, b * 2, a * 3];
+    } else {
+      a = 8 + Math.floor(Math.random() * 8);
+      b = 8 + Math.floor(Math.random() * 8);
+      answer = a * b;
+      label  = `${a} × ${b}`;
+      distOffsets = [a, b, a * 2, b * 2, a + b, a * 3];
+    }
+    const distractors = new Set();
+    const shuffled = [...distOffsets].sort(() => Math.random() - 0.5);
+    for (const off of shuffled) {
+      if (distractors.size >= 3) break;
+      const sign = Math.random() < 0.5 ? 1 : -1;
+      const cand = answer + sign * off;
+      if (cand > 0 && cand !== answer) distractors.add(cand);
+    }
+    let fb = 1;
+    while (distractors.size < 3) { const c = answer + fb++; if (!distractors.has(c)) distractors.add(c); }
+    const options = [answer, ...[...distractors]].sort(() => Math.random() - 0.5);
+    return { label, answer, options };
+  });
+}
 
 function launchProposalBuilder(opp) {
   if (state.actionsRemaining <= 0) {
@@ -312,49 +348,136 @@ function launchProposalBuilder(opp) {
     return;
   }
 
-  const daysLeft = opp.pricingDay - state.dayNumber;
-  const sections = [
-    { id: 'exec',     label: '📋 Executive Summary',     hint: 'High-level overview for decision-makers',  pts: 2 },
-    { id: 'roi',      label: '📊 ROI Analysis',           hint: 'Quantified business case',                  pts: 3 },
-    { id: 'impl',     label: '🔧 Implementation Plan',    hint: 'Rollout timeline and resource requirements', pts: 2 },
-    { id: 'cases',    label: '💬 Customer References',    hint: 'Comparable customer case studies',           pts: 2 },
-    { id: 'pricing',  label: '💰 Pricing & Terms',        hint: 'Commercial options and contract terms',      pts: 3 },
-    { id: 'security', label: '🔒 Security & Compliance',  hint: 'Certifications and data handling',           pts: 1 },
-  ];
+  const problems = _generateProblems(10);
+  let qIdx     = 0;
+  let pts      = 0;
+  const timerSeconds = 10 + (hasSkill(state, 'proposalTimerExtend') ? 5 : 0);
+  let timeLeft = timerSeconds;
+  let answered = false;
 
-  showModal(
-    `Build proposal — ${opp.company}`,
-    `<div style="font-size:13px;color:var(--text2);margin-bottom:4px">${opp.name} · Pricing meeting: ${formatDate(dayNumberToDate(opp.pricingDay))}</div>
-     <div style="font-size:12px;color:${daysLeft <= 1 ? '#E24B4A' : '#EF9F27'};margin-bottom:14px">
-       ${daysLeft <= 0 ? 'OVERDUE' : daysLeft === 1 ? '⚠ Due tomorrow' : `${daysLeft} days until meeting`}
-     </div>
-     <div style="font-size:12px;font-weight:500;margin-bottom:10px">Select sections to include (more = better quality):</div>
-     ${sections.map(s => `
-       <label style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;cursor:pointer;margin-bottom:6px;min-height:44px">
-         <input type="checkbox" name="proposal-section" value="${s.pts}" id="ps-${s.id}" style="flex-shrink:0;margin-top:2px">
-         <div>
-           <div style="font-size:13px;font-weight:500">${s.label}</div>
-           <div style="font-size:11px;color:var(--text2)">${s.hint}</div>
-         </div>
-       </label>`).join('')}`,
-    [
-      { label: 'Submit proposal', primary: true, onclick: `window._submitProposal(${opp.id})` },
-      { label: 'Cancel', onclick: 'window.closeModal()' },
-    ]
-  );
+  function renderQ() {
+    if (_pbTimerInterval) { clearInterval(_pbTimerInterval); _pbTimerInterval = null; }
+    const q = problems[qIdx];
+    answered = false;
+    timeLeft = timerSeconds;
 
-  window._submitProposal = (oppId) => {
-    const checked = document.querySelectorAll('input[name="proposal-section"]:checked');
-    const totalPts = Array.from(checked).reduce((s, c) => s + parseInt(c.value), 0);
-    const maxPts   = sections.reduce((s, sec) => s + sec.pts, 0);
-    const score    = Math.round((totalPts / maxPts) * 100);
-    const result   = actionBuildProposal(state, oppId, score);
-    if (result.success) { result.apply(state); closeModal(); renderAll(); }
-    else alert(result.message);
+    showModal(
+      `Build proposal — ${opp.company}`,
+      `<div style="font-family:Arial,sans-serif">
+        <div style="font-size:11px;color:var(--text2);margin-bottom:12px">Question ${qIdx + 1} of 10 &nbsp;·&nbsp; Score: ${Number.isInteger(pts) ? pts : pts.toFixed(1)} / ${qIdx}</div>
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:4px">
+            <span>Time remaining</span><span id="pb-time-left">${timerSeconds}s</span>
+          </div>
+          <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
+            <div id="pb-timer-bar" style="height:100%;width:100%;background:#378ADD;border-radius:4px;transition:width .2s linear"></div>
+          </div>
+        </div>
+        <div style="font-size:28px;font-weight:700;text-align:center;margin:20px 0;color:var(--text)">${q.label} = ?</div>
+        <div id="pb-feedback" style="min-height:20px;text-align:center;font-size:12px;font-weight:bold;margin-bottom:10px"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          ${q.options.map(opt => `
+            <button class="btn" onclick="window._pbAnswer(${opt === q.answer}, ${q.answer}, this)"
+              style="font-size:16px;font-weight:600;padding:14px 8px;min-height:52px">${opt}</button>`).join('')}
+        </div>
+      </div>`,
+      [],
+      true
+    );
+
+    _pbTimerInterval = setInterval(() => {
+      timeLeft--;
+      const bar    = document.getElementById('pb-timer-bar');
+      const timeEl = document.getElementById('pb-time-left');
+      if (bar)    { bar.style.width = `${(timeLeft / timerSeconds) * 100}%`; bar.style.background = timeLeft <= 3 ? '#E24B4A' : timeLeft <= 6 ? '#EF9F27' : '#378ADD'; }
+      if (timeEl) timeEl.textContent = `${timeLeft}s`;
+      if (timeLeft <= 0) {
+        clearInterval(_pbTimerInterval); _pbTimerInterval = null;
+        if (!answered) {
+          answered = true;
+          pts += 0.5;
+          const fb = document.getElementById('pb-feedback');
+          if (fb) { fb.style.color = '#EF9F27'; fb.textContent = `⏱ Time's up — half credit (answer: ${q.answer})`; }
+          document.querySelectorAll('#modal-box button[onclick^="window._pbAnswer"]').forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
+          setTimeout(advanceQ, 1200);
+        }
+      }
+    }, 1000);
+  }
+
+  window._pbAnswer = (isCorrect, correctAns, btnEl) => {
+    if (answered) return;
+    answered = true;
+    clearInterval(_pbTimerInterval); _pbTimerInterval = null;
+    document.querySelectorAll('#modal-box button[onclick^="window._pbAnswer"]').forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
+    const fb = document.getElementById('pb-feedback');
+    if (isCorrect) {
+      pts += 1;
+      btnEl.style.cssText += ';background:#1D9E75;color:#fff;opacity:1';
+      if (fb) { fb.style.color = '#1D9E75'; fb.textContent = '✓ Correct! +1 pt'; }
+    } else {
+      btnEl.style.cssText += ';background:#E24B4A;color:#fff;opacity:1';
+      if (fb) { fb.style.color = '#E24B4A'; fb.textContent = `✗ Wrong — answer was ${correctAns}`; }
+    }
+    setTimeout(advanceQ, 900);
   };
+
+  function advanceQ() {
+    qIdx++;
+    if (qIdx < problems.length) renderQ();
+    else showProposalResult();
+  }
+
+  function showProposalResult() {
+    clearInterval(_pbTimerInterval); _pbTimerInterval = null;
+    const pct = Math.round((pts / 10) * 100);
+    let mult, tierLabel, tierColor;
+    if (pts >= 8)      { mult = 1.2;  tierLabel = 'Excellent'; tierColor = '#1D9E75'; }
+    else if (pts >= 6) { mult = 1.0;  tierLabel = 'Good';      tierColor = '#378ADD'; }
+    else if (pts >= 4) { mult = 0.85; tierLabel = 'Decent';    tierColor = '#EF9F27'; }
+    else               { mult = 0.7;  tierLabel = 'Poor';      tierColor = '#E24B4A'; }
+    const projValue = Math.round(opp.value * mult);
+
+    showModal(
+      `Proposal ready — ${opp.company}`,
+      `<div style="text-align:center;padding:20px 0;font-family:Arial,sans-serif">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:8px">Proposal quality</div>
+        <div style="font-size:40px;font-weight:700;color:${tierColor};margin:4px 0">${tierLabel}</div>
+        <div style="font-size:13px;color:var(--text2);margin:8px 0">Score: ${Number.isInteger(pts) ? pts : pts.toFixed(1)}/10 · Value multiplier: <strong style="color:${tierColor}">${mult}x</strong></div>
+        <div style="font-size:18px;font-weight:600;color:var(--text);margin-top:16px">Projected deal: $${projValue.toLocaleString()}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Base: $${opp.value.toLocaleString()} × ${mult}</div>
+      </div>`,
+      [{ label: 'Submit Proposal', primary: true, onclick: `window._submitProposal(${opp.id}, ${pct}, ${mult})` }],
+      true
+    );
+
+    window._submitProposal = (oppId, score, mult) => {
+      const result = actionBuildProposal(state, oppId, score, mult);
+      if (result.success) { result.apply(state); closeModal(); renderAll(); }
+      else alert(result.message);
+    };
+  }
+
+  renderQ();
 }
 
 // ─── Mini-game 1: Slide Picker ────────────────────────────────────────────────
+
+const PROFILE_BRIEFS = {
+  cfo:         { label: 'CFO',              interests: 'ROI, cost reduction, speed to value, financial risk',   avoid: 'Technical architecture, roadmap, feature lists' },
+  cto:         { label: 'CTO',              interests: 'Architecture, security, integrations, scalability',     avoid: 'Business cases, pricing comparisons, market slides' },
+  operations:  { label: 'Operations Lead',  interests: 'Ease of use, support, fast implementation, automation', avoid: 'Technical specs, market comparisons' },
+  procurement: { label: 'Procurement Lead', interests: 'Transparent pricing, trust, security, vendor risk',     avoid: 'Product roadmap, feature walkthroughs' },
+  finance:     { label: 'Finance Lead',     interests: 'ROI, cost reduction, speed to value, financial risk',   avoid: 'Technical architecture, roadmap, feature lists' },
+  technical:   { label: 'Technical Lead',   interests: 'Architecture, security, integrations, scalability',     avoid: 'Business cases, pricing comparisons, market slides' },
+};
+
+const TIER_REACTIONS = {
+  high:    ["Directly relevant to us.", "This is exactly what we needed to hear.", "Strong pick for this audience.", "Hits our key concern.", "Good — this matters to us."],
+  neutral: ["Interesting, but not our top priority.", "OK, useful context.", "Sure — not our main concern though.", "Moderately relevant."],
+  low:     ["Doesn't apply to us.", "We don't care about this.", "Wrong audience.", "Missed the mark.", "Not relevant to our decision."],
+  bad:     ["Checks phone mid-slide.", "Visibly loses interest. Starts looking at their watch.", "Interrupts to ask when you'll get to the pricing.", "Starts typing on their laptop.", "Politely asks if you can move on."],
+};
 
 function launchSlidePicker(opp) {
   if (state.actionsRemaining <= 0) {
@@ -363,28 +486,29 @@ function launchSlidePicker(opp) {
     return;
   }
 
-  const profile   = BUYER_PROFILES[opp.buyerProfile] || BUYER_PROFILES.operations;
-  const selected  = [];
+  const brief    = PROFILE_BRIEFS[opp.buyerProfile] || PROFILE_BRIEFS.operations;
+  const pool12   = [...SLIDE_POOL].sort(() => Math.random() - 0.5).slice(0, 12);
+  const selected = [];
   const MAX_PICKS = 5;
+
+  // Mark hint slides for slidePicker2Hints skill
+  let hintSlideIndices = new Set();
+  if (hasSkill(state, 'slidePicker2Hints')) {
+    const scored = pool12.map((s, i) => ({ i, raw: (s.tags || []).reduce((sum, tag) => sum + ((BUYER_PROFILES[opp.buyerProfile] || {})[tag] || 0), 0) }));
+    scored.sort((a, b) => b.raw - a.raw);
+    hintSlideIndices = new Set(scored.slice(0, 2).map(x => x.i));
+  }
 
   function renderGame() {
     showModal(
       `Demo — ${opp.company}`,
       `<div class="slide-picker-wrap">
         <div class="buyer-brief">
-          <div class="buyer-brief-role">${profile.label}</div>
-          <div class="buyer-brief-desc">${profile.description}</div>
-          <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap">
-            <div class="buyer-brief-col">
-              <div class="buyer-brief-label">Pain points</div>
-              ${profile.painPoints.map(p => `<div class="buyer-brief-item">• ${p}</div>`).join('')}
-              <div class="buyer-brief-label" style="margin-top:8px">Priorities</div>
-              ${profile.priorities.map(p => `<div class="buyer-brief-item">• ${p}</div>`).join('')}
-            </div>
-            <div class="buyer-brief-col">
-              <div class="buyer-brief-label">Less important</div>
-              ${profile.dontCare.map(d => `<div class="buyer-brief-item" style="color:var(--text3)">• ${d}</div>`).join('')}
-            </div>
+          <div class="buyer-brief-role">${brief.label}</div>
+          <div class="buyer-brief-desc" style="font-size:12px;color:var(--text2);margin-top:4px">${opp.flavourNote || opp.company}</div>
+          <div style="margin-top:8px;font-size:11px">
+            <div style="margin-bottom:4px"><strong style="color:#1D9E75">Cares about:</strong> ${brief.interests}</div>
+            <div><strong style="color:#E24B4A">Less important:</strong> ${brief.avoid}</div>
           </div>
         </div>
         <div style="font-size:12px;color:var(--text2);margin:14px 0 8px">
@@ -392,15 +516,14 @@ function launchSlidePicker(opp) {
           <span style="float:right;font-weight:600">${selected.length}/5 selected</span>
         </div>
         <div class="slide-grid">
-          ${SLIDES.map((s, i) => {
-            const idx     = selected.indexOf(i);
+          ${pool12.map((s, i) => {
+            const idx      = selected.indexOf(i);
             const isPicked = idx !== -1;
             const numBadge = isPicked ? `<div class="slide-badge">${idx + 1}</div>` : '';
-            return `<div
-              class="slide-card${isPicked ? ' picked' : ''}"
-              onclick="window._slidePickerToggle(${i})"
-            >
+            const starHint = hintSlideIndices.has(i) ? `<div style="position:absolute;top:2px;right:4px;font-size:10px;color:#EF9F27">★</div>` : '';
+            return `<div class="slide-card${isPicked ? ' picked' : ''}" onclick="window._slidePickerToggle(${i})" style="position:relative">
               ${numBadge}
+              ${starHint}
               <div class="slide-icon">${s.icon}</div>
               <div class="slide-title">${s.title}</div>
               <div class="slide-desc">${s.desc}</div>
@@ -411,63 +534,72 @@ function launchSlidePicker(opp) {
       selected.length === MAX_PICKS
         ? [{ label: 'Present slides', primary: true, onclick: `window._slidePickerSubmit(${opp.id})` }]
         : [],
-      true // mini = large modal
+      true
     );
   }
 
   window._slidePickerToggle = (idx) => {
     const pos = selected.indexOf(idx);
-    if (pos !== -1) {
-      selected.splice(pos, 1);
-    } else if (selected.length < MAX_PICKS) {
-      selected.push(idx);
-    }
+    if (pos !== -1) selected.splice(pos, 1);
+    else if (selected.length < MAX_PICKS) selected.push(idx);
     renderGame();
   };
 
   window._slidePickerSubmit = (oppId) => {
-    const scores  = selected.map(i => {
-      const p = BUYER_PROFILES[opp.buyerProfile] || BUYER_PROFILES.operations;
-      if (p.high.includes(i)) return { i, pts: 18 + Math.floor(Math.random() * 3), tier: 'high' };
-      if (p.low.includes(i))  return { i, pts: Math.floor(Math.random() * 4),      tier: 'low'  };
-      return                          { i, pts: 12 + Math.floor(Math.random() * 5), tier: 'neutral' };
-    });
-    const total = scores.reduce((s, r) => s + r.pts, 0);
-    const maxPossible = 5 * 20;
-    const score = Math.round((total / maxPossible) * 100);
-    const grade = score >= 80 ? 'A' : score >= 60 ? 'B' : score >= 40 ? 'C' : 'D';
-    showSlideResults(opp, scores, score, grade);
+    const weeklyMods = state.weeklySlideModifiers || {};
+    const scores     = selected.map(i => { const { pts, tier } = scoreSlide(pool12[i], opp.buyerProfile, weeklyMods); return { slide: pool12[i], pts, tier }; });
+    const totalPoints = scores.reduce((s, r) => s + r.pts, 0);
+    const score       = Math.max(0, Math.round(((totalPoints + 15) / (5 * 19 + 15)) * 100));
+    showSlideResults(opp, scores, score);
   };
 
   renderGame();
 }
 
-function showSlideResults(opp, scores, score, grade) {
-  const gradeColor  = grade === 'A' ? '#1D9E75' : grade === 'B' ? '#378ADD' : grade === 'C' ? '#EF9F27' : '#E24B4A';
-  const gradeAdj    = grade === 'A' ? '+15%' : grade === 'B' ? '+8%' : grade === 'C' ? '0%' : '-8%';
-  const reactionPick = (tier) => {
-    const arr = SLIDE_REACTIONS[tier];
-    return arr[Math.floor(Math.random() * arr.length)];
-  };
+function showSlideResults(opp, scores, score) {
+  const totalPoints = scores.reduce((s, r) => s + r.pts, 0);
+  const grade      = totalPoints >= 35 ? 'A' : totalPoints >= 20 ? 'B' : totalPoints >= 5 ? 'C' : 'D';
+  const gradeColor = grade === 'A' ? '#1D9E75' : grade === 'B' ? '#378ADD' : grade === 'C' ? '#EF9F27' : '#E24B4A';
+  const gradeAdj   = grade === 'A' ? '+15%' : grade === 'B' ? '+8%' : grade === 'C' ? '0%' : '-8%';
 
-  let revealedCount = 0;
+  const pickReaction = (tier) => { const arr = TIER_REACTIONS[tier] || TIER_REACTIONS.low; return arr[Math.floor(Math.random() * arr.length)]; };
+
   const rows = scores.map((r, j) => {
-    const slide      = SLIDES[r.i];
-    const barColor   = r.tier === 'high' ? '#1D9E75' : r.tier === 'low' ? '#E24B4A' : '#378ADD';
-    const barWidth   = Math.round((r.pts / 20) * 100);
-    const reaction   = reactionPick(r.tier);
+    const isBad = r.tier === 'bad';
+    const barColor = isBad ? '#E24B4A' : r.tier === 'high' ? '#1D9E75' : r.tier === 'low' ? '#EF9F27' : '#378ADD';
+    const barWidthPct = isBad ? 0 : Math.round((r.pts / 19) * 100);
+    const badBar = isBad ? `<div style="height:100%;width:30%;background:#E24B4A;margin-left:auto;border-radius:3px;transition:width .5s"></div>` : '';
+    const reactionColor = isBad ? '#E24B4A' : 'var(--text3)';
+    const ptsLabel = isBad ? '-15' : `${r.pts}/19`;
     return `<div class="slide-result-row" id="slide-res-${j}" style="opacity:0;transition:opacity .3s">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span style="font-size:14px">${slide.icon}</span>
-        <span style="font-size:12px;font-weight:500;flex:1">${slide.title}</span>
-        <span style="font-size:11px;color:var(--text2)">${r.pts}/20</span>
+        <span style="font-size:14px">${r.slide.icon}</span>
+        <span style="font-size:12px;font-weight:500;flex:1">${r.slide.title}</span>
+        <span style="font-size:11px;color:${reactionColor}">${ptsLabel}</span>
       </div>
-      <div style="font-size:11px;color:var(--text3);font-style:italic;margin-bottom:5px">"${reaction}"</div>
-      <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
-        <div style="height:100%;width:${barWidth}%;background:${barColor};border-radius:3px;transition:width .5s"></div>
+      <div style="font-size:11px;color:${reactionColor};font-style:italic;margin-bottom:5px">"${pickReaction(r.tier)}"</div>
+      <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;display:flex">
+        ${isBad ? badBar : `<div style="height:100%;width:${barWidthPct}%;background:${barColor};border-radius:3px;transition:width .5s"></div>`}
       </div>
     </div>`;
   }).join('');
+
+  // Summary sections for bad and good slides
+  const badSlides  = scores.filter(r => r.tier === 'bad');
+  const goodSlides = scores.filter(r => r.tier === 'high').slice(0, 2);
+  let summaryHtml = '';
+  if (badSlides.length > 0) {
+    summaryHtml += `<div style="margin-top:14px;padding:10px;background:#fde8e8;border-radius:6px">
+      <div style="font-size:11px;font-weight:bold;color:#E24B4A;margin-bottom:4px">SLIDES THAT HURT YOU:</div>
+      ${badSlides.map(r => `<div style="font-size:11px;color:#E24B4A">• ${r.slide.title}</div>`).join('')}
+    </div>`;
+  }
+  if (goodSlides.length > 0) {
+    summaryHtml += `<div style="margin-top:8px;padding:10px;background:#e8f5e9;border-radius:6px">
+      <div style="font-size:11px;font-weight:bold;color:#1D9E75;margin-bottom:4px">SLIDES THAT HELPED YOU:</div>
+      ${goodSlides.map(r => `<div style="font-size:11px;color:#1D9E75">• ${r.slide.title}</div>`).join('')}
+    </div>`;
+  }
 
   showModal(
     `Demo results — ${opp.company}`,
@@ -475,22 +607,17 @@ function showSlideResults(opp, scores, score, grade) {
      <div id="slide-final-grade" style="display:none;text-align:center;margin-top:20px;padding:16px;background:var(--bg2);border-radius:8px">
        <div style="font-size:36px;font-weight:700;color:${gradeColor}">${grade}</div>
        <div style="font-size:13px;color:var(--text2);margin-top:4px">Score: ${score}/100 · Probability adjusted: ${gradeAdj}</div>
-     </div>`,
+     </div>
+     ${summaryHtml}`,
     [{ label: 'Continue', primary: true, onclick: `window._slidePickerComplete(${opp.id}, ${score})` }],
     true
   );
 
-  // Reveal rows one by one
   scores.forEach((_, j) => {
     setTimeout(() => {
       const row = document.getElementById(`slide-res-${j}`);
       if (row) row.style.opacity = '1';
-      if (j === scores.length - 1) {
-        setTimeout(() => {
-          const g = document.getElementById('slide-final-grade');
-          if (g) g.style.display = 'block';
-        }, 400);
-      }
+      if (j === scores.length - 1) setTimeout(() => { const g = document.getElementById('slide-final-grade'); if (g) g.style.display = 'block'; }, 400);
     }, j * 450);
   });
 
@@ -519,55 +646,50 @@ function launchDealOrNoDeal(opp) {
     return;
   }
 
-  // Shuffle multipliers into cases
-  const shuffled = [...MULTIPLIERS].sort(() => Math.random() - 0.5);
-  const cases    = shuffled.map((m, i) => ({ num: i + 1, multiplier: m, open: false }));
+  const baseValue = Math.round(opp.value * (opp.proposalMultiplier || 1.0));
+  const shuffled  = [...MULTIPLIERS].sort(() => Math.random() - 0.5);
+  const cases     = shuffled.map((m, i) => ({ num: i + 1, multiplier: m, open: false }));
 
-  let keptCase   = null;  // index into cases
-  let opened     = [];    // indices of opened cases
-  let phase      = 'pick'; // 'pick' | 'open' | 'banker' | 'done'
+  let keptCase    = null;
+  let opened      = [];
+  let phase       = 'pick';
   let bankerOffer = null;
-  const baseValue = opp.value;
-  const ROUNDS    = [3, 3, 3]; // open 3, offer, open 3, offer, open 3, final
+  let confidence  = 65;
+  const walkawayBonus = hasSkill(state, 'walkawayRiskReduction') ? 20 : 0;
+  let walkedAway  = false;
 
   function remainingMultipliers() {
-    return cases
-      .filter((c, i) => i !== keptCase && !c.open)
-      .map(c => c.multiplier);
+    return cases.filter((c, i) => i !== keptCase && !c.open).map(c => c.multiplier);
   }
 
   function calcBankerOffer() {
     const rem = remainingMultipliers();
-    if (rem.length === 0) return 0;
+    if (!rem.length) return 0;
     return Math.round(baseValue * (rem.reduce((s, m) => s + m, 0) / rem.length));
   }
 
-  function openedThisRound() {
-    const totalOpened = opened.length;
-    const roundIdx    = Math.floor(totalOpened / 3);
-    const inRound     = totalOpened % 3;
-    return inRound;
-  }
-
   function renderGame() {
-    const allOpen = cases.filter((_, i) => i !== keptCase && !cases[i].open);
-    const totalOpenable = cases.length - (keptCase !== null ? 1 : 0);
-    const openedCount   = opened.length;
-
+    const confColor = confidence >= 60 ? '#1D9E75' : confidence >= 35 ? '#EF9F27' : '#E24B4A';
+    const confLabel = confidence >= 60 ? 'Interested' : confidence >= 35 ? 'Wavering' : 'Cold';
     let instruction = '';
-    if (phase === 'pick')   instruction = '<strong>Pick a case</strong> — this will be your deal.';
-    else if (phase === 'open')  instruction = `<strong>Open a case</strong> to eliminate it. (${3 - (openedCount % 3)} more before banker calls)`;
+    if (phase === 'pick')    instruction = '<strong>Pick a case</strong> — this will be your proposed deal.';
+    else if (phase === 'open')   instruction = `<strong>Open a case</strong> to eliminate it. (${3 - (opened.length % 3)} more before banker calls)`;
     else if (phase === 'banker') instruction = `<strong>Banker offer: $${bankerOffer.toLocaleString()}</strong> — accept or keep opening?`;
-    else if (phase === 'done')  instruction = 'Reveal complete.';
 
     showModal(
       `Pricing meeting — ${opp.company}`,
       `<div class="dond-wrap">
-        <div class="dond-info">
-          <div style="font-size:13px;color:var(--text2)">Your deal value won't be revealed until the end. Open cases to gather information.</div>
-          ${keptCase !== null ? `<div style="margin-top:8px;font-size:13px">Your case: <strong>#${cases[keptCase].num}</strong></div>` : ''}
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text2);margin-bottom:3px">Buyer confidence</div>
+            <div style="height:10px;background:var(--bg3);border-radius:5px;overflow:hidden">
+              <div style="height:100%;width:${confidence}%;background:${confColor};border-radius:5px;transition:width .4s"></div>
+            </div>
+            <div style="font-size:10px;color:${confColor};font-weight:bold;margin-top:3px">${confLabel} (${confidence}%)</div>
+          </div>
+          ${keptCase !== null ? `<div style="font-size:12px;color:var(--text2)">Your case: <strong>#${cases[keptCase].num}</strong></div>` : ''}
         </div>
-        <div style="margin:12px 0;font-size:13px;padding:10px 12px;background:var(--bg2);border-radius:8px">${instruction}</div>
+        <div style="margin:10px 0;font-size:13px;padding:10px 12px;background:var(--bg2);border-radius:8px">${instruction}</div>
         ${phase === 'banker' ? `
           <div style="display:flex;gap:8px;margin-bottom:12px">
             <button class="btn btn-primary" onclick="window._dondAccept()">Accept $${bankerOffer.toLocaleString()}</button>
@@ -575,30 +697,45 @@ function launchDealOrNoDeal(opp) {
           </div>` : ''}
         <div class="dond-grid">
           ${cases.map((c, i) => {
-            const isKept   = i === keptCase;
-            const isOpen   = c.open;
-            const canPick  = phase === 'pick' && !isOpen;
-            const canOpen  = phase === 'open' && i !== keptCase && !isOpen;
-            const bg = isKept ? '#E6F1FB' : isOpen ? 'var(--bg3)' : 'var(--bg2)';
-            const border = isKept ? '1.5px solid #378ADD' : '0.5px solid var(--border)';
-            const cursor = (canPick || canOpen) ? 'pointer' : 'default';
-            const label = isOpen
+            const isKept  = i === keptCase;
+            const isOpen  = c.open;
+            const canPick = phase === 'pick' && !isOpen;
+            const canOpen = phase === 'open' && i !== keptCase && !isOpen;
+            const bg      = isKept ? '#E6F1FB' : isOpen ? 'var(--bg3)' : 'var(--bg2)';
+            const border  = isKept ? '1.5px solid #378ADD' : '0.5px solid var(--border)';
+            const cursor  = (canPick || canOpen) ? 'pointer' : 'default';
+            const label   = isOpen
               ? `<span style="font-size:12px;font-weight:600;color:${c.multiplier >= 1 ? '#1D9E75' : c.multiplier >= 0.8 ? '#378ADD' : '#E24B4A'}">${c.multiplier}x</span>`
               : isKept ? `<span style="font-size:11px;font-weight:600;color:#378ADD">YOUR<br>DEAL</span>`
               : `<span style="font-size:16px;font-weight:700;color:var(--text)">${c.num}</span>`;
             const onclick = canPick ? `window._dondPickCase(${i})` : canOpen ? `window._dondOpenCase(${i})` : '';
-            return `<div
-              class="dond-case"
-              style="background:${bg};border:${border};border-radius:8px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;cursor:${cursor};text-align:center;padding:4px;min-height:44px"
-              ${onclick ? `onclick="${onclick}"` : ''}
-            >${label}</div>`;
+            return `<div class="dond-case" style="background:${bg};border:${border};border-radius:8px;aspect-ratio:1;display:flex;align-items:center;justify-content:center;cursor:${cursor};text-align:center;padding:4px;min-height:44px" ${onclick ? `onclick="${onclick}"` : ''}>${label}</div>`;
           }).join('')}
         </div>
-        <div class="dond-opened" style="margin-top:10px;font-size:11px;color:var(--text3)">
+        <div style="margin-top:8px;font-size:11px;color:var(--text3)">
           ${opened.length > 0 ? 'Eliminated: ' + opened.map(i => `${cases[i].multiplier}x`).join(', ') : ''}
         </div>
       </div>`,
       [],
+      true
+    );
+  }
+
+  function handleWalkaway() {
+    const result = actionBuyerWalkaway(state, opp.id);
+    if (result.success) result.apply(state);
+    renderAll();
+    showModal(
+      `Deal lost — ${opp.company}`,
+      `<div style="text-align:center;padding:24px 0;font-family:Arial,sans-serif">
+        <div style="font-size:36px;margin-bottom:12px">📴</div>
+        <div style="font-size:16px;font-weight:bold;color:#E24B4A;margin-bottom:10px">The buyer walked away.</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;max-width:280px;margin:0 auto">
+          ${opp.name} ended the call. The deal no longer seemed worth pursuing at this price point.
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:14px">Buyer confidence had fallen to ${confidence}%</div>
+      </div>`,
+      [{ label: 'OK', onclick: 'window.closeModal()' }],
       true
     );
   }
@@ -610,22 +747,43 @@ function launchDealOrNoDeal(opp) {
   };
 
   window._dondOpenCase = (idx) => {
+    if (walkedAway) return;
     cases[idx].open = true;
     opened.push(idx);
+    // Update buyer confidence based on what was revealed
+    const mult = cases[idx].multiplier;
+    if (mult >= 1.0)      confidence = Math.max(10, confidence - 10);
+    else if (mult >= 0.8) confidence = Math.max(10, confidence - 3);
+    else if (mult < 0.65) confidence = Math.min(90, confidence + 8);
+    else                  confidence = Math.min(90, confidence + 3);
+    // Walkaway check (after 3+ opened, open phase only)
+    if (opened.length >= 3 && phase === 'open') {
+      const walkawayChance = Math.max(0, 65 - confidence - walkawayBonus);
+      if (Math.random() * 100 < walkawayChance) {
+        walkedAway = true;
+        handleWalkaway();
+        return;
+      }
+    }
+    // Banker offer every 3 opened
     const inRound = opened.length % 3;
     if (inRound === 0 && remainingMultipliers().length > 0) {
-      // Time for banker offer
       phase       = 'banker';
       bankerOffer = calcBankerOffer();
+    }
+    // Auto-reveal when no openable cases remain
+    if (phase === 'open' && remainingMultipliers().length === 0) {
+      const kept = cases[keptCase];
+      _completeDealOrNoDeal(opp, Math.round(baseValue * kept.multiplier), baseValue,
+        Math.round(Math.min(100, (kept.multiplier / 1.1) * 100)), 'kept');
+      return;
     }
     renderGame();
   };
 
   window._dondAccept = () => {
-    const finalValue = bankerOffer;
-    const finalMult  = finalValue / baseValue;
-    const score      = Math.round((finalMult / 1.1) * 100);
-    _completeDealOrNoDeal(opp, finalValue, score, 'banker');
+    const score = Math.round(Math.min(100, (bankerOffer / (baseValue * 1.1)) * 100));
+    _completeDealOrNoDeal(opp, bankerOffer, baseValue, score, 'banker');
   };
 
   window._dondContinue = () => {
@@ -633,37 +791,38 @@ function launchDealOrNoDeal(opp) {
     renderGame();
   };
 
-  // If no more cases to open, auto-reveal
-  function checkAutoReveal() {
-    if (phase === 'open' && remainingMultipliers().length === 0) {
-      const kept = cases[keptCase];
-      _completeDealOrNoDeal(opp, Math.round(baseValue * kept.multiplier),
-        Math.round((kept.multiplier / 1.1) * 100), 'kept');
-    }
-  }
-
-  const origOpen  = window._dondOpenCase;
-  window._dondOpenCase = (idx) => { origOpen(idx); checkAutoReveal(); };
-
   renderGame();
 }
 
-function _completeDealOrNoDeal(opp, finalValue, score, source) {
-  const label = source === 'banker' ? 'Banker offer accepted' : 'Your case revealed';
+function _completeDealOrNoDeal(opp, finalValue, baseValue, score, source) {
+  const label        = source === 'banker' ? 'Banker offer accepted' : 'Your case revealed';
+  const proposalMult = opp.proposalMultiplier || 1.0;
   showModal(
     `Deal finalised — ${opp.company}`,
-    `<div style="text-align:center;padding:24px 0">
+    `<div style="text-align:center;padding:24px 0;font-family:Arial,sans-serif">
       <div style="font-size:13px;color:var(--text2);margin-bottom:6px">${label}</div>
       <div style="font-size:42px;font-weight:700;color:#1D9E75;margin:12px 0">$${finalValue.toLocaleString()}</div>
-      <div style="font-size:12px;color:var(--text2)">Original estimate: $${opp.value.toLocaleString()}</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:4px">Base estimate: $${opp.value.toLocaleString()}</div>
+      <div style="font-size:11px;color:var(--text3)">Proposal multiplier: ${proposalMult}x · Adjusted base: $${baseValue.toLocaleString()}</div>
     </div>`,
     [{ label: 'Continue', primary: true, onclick: `window._dondComplete(${opp.id}, ${finalValue}, ${score})` }],
     true
   );
   window._dondComplete = (oppId, fv, sc) => {
     const result = actionHostPricing(state, oppId, sc, fv);
-    if (result.success) { result.apply(state); closeModal(); renderAll(); }
-    else alert(result.message);
+    if (result.success) {
+      result.apply(state);
+      if (state.pendingWinBanner) {
+        const banner = state.pendingWinBanner;
+        state.pendingWinBanner = null;
+        closeModal();
+        renderAll();
+        showWinBanner(banner.company, banner.value);
+      } else {
+        closeModal();
+        renderAll();
+      }
+    } else alert(result.message);
   };
 }
 
@@ -672,15 +831,27 @@ function _completeDealOrNoDeal(opp, finalValue, score, source) {
 function launchDialogueMatcher(opp) {
   const isLive = opp.stage === STAGES.LIVE_CALL;
   const pool   = isLive ? CLOSE_DIALOGUES : REBOOK_DIALOGUES;
-  const seq    = pool[Math.floor(Math.random() * pool.length)];
+  let seq      = pool[Math.floor(Math.random() * pool.length)];
 
-  let roundIdx  = 0;
+  // Shuffle options per round so correct answer position varies
+  seq = JSON.parse(JSON.stringify(seq)); // deep copy to avoid mutating the imported constant
+  seq.rounds.forEach(round => {
+    round.options = round.options.sort(() => Math.random() - 0.5);
+  });
+
+  let roundIdx   = 0;
   let totalScore = 0;
-  let lastResult = null; // 'correct' | 'wrong' | null
 
   function renderRound() {
-    const round   = seq.rounds[roundIdx];
-    const isLast  = roundIdx === seq.rounds.length - 1;
+    // Auto-correct first round (confident_opener skill)
+    if (roundIdx === 0 && hasSkill(state, 'autoCorrectRound1')) {
+      totalScore += 25;
+      roundIdx++;
+      if (roundIdx < seq.rounds.length) { renderRound(); return; }
+      else { showDialogueResult(opp, isLive, totalScore); return; }
+    }
+
+    const round = seq.rounds[roundIdx];
 
     showModal(
       `${isLive ? 'Close call' : 'Rebook call'} — ${opp.name}`,
@@ -693,20 +864,11 @@ function launchDialogueMatcher(opp) {
           </div>
           <div style="margin-left:auto;font-size:13px;font-weight:600;color:#378ADD">Score: ${totalScore}</div>
         </div>
-
-        ${roundIdx === 0 ? `<div class="dialogue-bubble opener">${seq.buyerOpener}</div>` : ''}
-
         <div class="dialogue-bubble buyer" style="margin-top:8px">${round.buyerStatement}</div>
-
-        ${lastResult ? `<div class="dialogue-feedback ${lastResult}" style="margin:8px 0">
-          ${lastResult === 'correct' ? '✓ Good match +25' : '✗ Wrong tone — 0 pts'}
-        </div>` : ''}
-
         <div style="margin-top:14px;font-size:11px;color:var(--text2);margin-bottom:8px">Round ${roundIdx + 1} of ${seq.rounds.length} — choose your response:</div>
         <div class="dialogue-options">
           ${round.options.map((opt, i) => `
             <div class="dialogue-opt" onclick="window._dialogueChoose(${i})" style="min-height:44px">
-              <div style="font-size:11px;color:var(--text3);margin-bottom:2px">${opt.style}</div>
               <div style="font-size:13px">${opt.text}</div>
             </div>`).join('')}
         </div>
@@ -716,15 +878,37 @@ function launchDialogueMatcher(opp) {
     );
 
     window._dialogueChoose = (optIdx) => {
+      window._dialogueChoose = () => {}; // prevent double-tap
       const opt = round.options[optIdx];
-      if (opt.correct) { totalScore += 25; lastResult = 'correct'; }
-      else { lastResult = 'wrong'; }
-      roundIdx++;
-      if (roundIdx < seq.rounds.length) {
-        renderRound();
-      } else {
-        showDialogueResult(opp, isLive, totalScore);
-      }
+      if (opt.correct) totalScore += 25;
+      else if (opt.partialCredit) totalScore += 10;
+
+      // Highlight chosen option, fade others
+      document.querySelectorAll('.dialogue-opt').forEach((el, i) => {
+        el.onclick = null;
+        el.style.opacity   = i === optIdx ? '1' : '0.4';
+        if (i === optIdx) el.style.background = opt.correct ? '#e8f5e9' : opt.partialCredit ? '#fff8e1' : '#fde8e8';
+      });
+
+      // Append "..." typing indicator
+      const wrap = document.querySelector('.dialogue-wrap');
+      const typing = document.createElement('div');
+      typing.className  = 'dialogue-bubble buyer';
+      typing.style.cssText = 'margin-top:10px;font-style:italic;color:var(--text3)';
+      typing.textContent = '...';
+      if (wrap) wrap.appendChild(typing);
+
+      // 500ms later: replace with reaction text
+      setTimeout(() => {
+        typing.style.color     = 'var(--text2)';
+        typing.textContent     = `"${opt.reaction}"`;
+        // 900ms later: advance to next round
+        setTimeout(() => {
+          roundIdx++;
+          if (roundIdx < seq.rounds.length) renderRound();
+          else showDialogueResult(opp, isLive, totalScore);
+        }, 900);
+      }, 500);
     };
   }
 
@@ -732,16 +916,16 @@ function launchDialogueMatcher(opp) {
 }
 
 function showDialogueResult(opp, isLive, totalScore) {
-  const pctAdj  = totalScore >= 80 ? '+15%' : totalScore >= 50 ? '+5%' : '-10%';
-  const adjNum  = totalScore >= 80 ? 15 : totalScore >= 50 ? 5 : -10;
-  const outcome = totalScore >= 80 ? 'Strong call — you matched their tone throughout.' :
-                  totalScore >= 50 ? 'Decent call — a few miscues but you kept it together.' :
-                  'Rough call — your tone missed the mark.';
-  const color   = totalScore >= 80 ? '#1D9E75' : totalScore >= 50 ? '#378ADD' : '#E24B4A';
+  let pctAdj, outcome, color;
+  if (totalScore >= 100)     { pctAdj = '+15%'; outcome = 'Exceptional — matched every cue.';          color = '#1D9E75'; }
+  else if (totalScore >= 75) { pctAdj = '+8%';  outcome = 'Strong call — you read the room well.';     color = '#1D9E75'; }
+  else if (totalScore >= 50) { pctAdj = '+3%';  outcome = 'Decent call — a few misses.';               color = '#378ADD'; }
+  else if (totalScore >= 25) { pctAdj = '-5%';  outcome = 'Rough call — tone missed the mark.';        color = '#EF9F27'; }
+  else                       { pctAdj = '-15%'; outcome = "Poor call — the buyer wasn't impressed.";    color = '#E24B4A'; }
 
   showModal(
     `Call complete — ${opp.name}`,
-    `<div style="text-align:center;padding:16px 0">
+    `<div style="text-align:center;padding:16px 0;font-family:Arial,sans-serif">
       <div style="font-size:42px;font-weight:700;color:${color}">${totalScore}</div>
       <div style="font-size:13px;color:var(--text2);margin:8px 0">${outcome}</div>
       <div style="font-size:12px;color:var(--text3)">Probability adjustment: <strong style="color:${color}">${pctAdj}</strong></div>
@@ -756,10 +940,19 @@ function showDialogueResult(opp, isLive, totalScore) {
       : actionRebookCall(state, oppId, score);
     if (result.success) {
       result.apply(state);
-      closeModal();
-      renderAll();
+      // Check for win banner
+      if (state.pendingWinBanner) {
+        const banner = state.pendingWinBanner;
+        state.pendingWinBanner = null;
+        closeModal();
+        renderAll();
+        showWinBanner(banner.company, banner.value);
+      } else {
+        closeModal();
+        renderAll();
+      }
       if (result.outcome) {
-        const msgs = { won: 'Deal won! 🎉', lost: 'Deal lost.', nad: 'No decision — moved to futures.' };
+        const msgs = { won: 'Deal won!', lost: 'Deal lost.', nad: 'No decision — moved to futures.' };
         setTimeout(() => showToast(msgs[result.outcome] || result.outcome), 300);
       } else if (result.rebooked !== undefined) {
         setTimeout(() => showToast(result.rebooked ? 'Rebooked! Schedule their demo.' : 'Not ready yet — try again later.'), 300);
@@ -781,6 +974,20 @@ function showToast(msg) {
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2800);
 }
 
+function showWinBanner(company, value) {
+  const banner = document.createElement('div');
+  banner.className = 'win-banner';
+  banner.innerHTML = `<strong>DEAL CLOSED</strong> — ${company} — $${value.toLocaleString()}`;
+  document.body.appendChild(banner);
+  // Flash kanban
+  const kanban = document.getElementById('panel-pipeline');
+  if (kanban) {
+    kanban.classList.add('win-flash');
+    setTimeout(() => kanban.classList.remove('win-flash'), 800);
+  }
+  setTimeout(() => banner.remove(), 2500);
+}
+
 // ─── Day navigation ───────────────────────────────────────────────────────────
 
 window.switchAvatar = function() {
@@ -790,9 +997,35 @@ window.switchAvatar = function() {
 };
 
 window.nextDay = function() {
+  if (_pbTimerInterval) { clearInterval(_pbTimerInterval); _pbTimerInterval = null; }
   state = advanceDay(state);
-  _currentEmailId = null;
+  _currentEmailId    = null;
+  _expandedContactId = null;
   renderAll();
+
+  // Check fired first (highest priority)
+  if (state.pendingFired) {
+    state.pendingFired = false;
+    saveState(state);
+    setTimeout(showFiredScreen, 200);
+    return;
+  }
+  // Meeting interruption
+  if (state.pendingMeeting) {
+    const meeting = state.pendingMeeting;
+    state.pendingMeeting = null;
+    saveState(state);
+    setTimeout(() => showMeetingInterruptionCard(meeting), 200);
+    return;
+  }
+  // Quarterly review
+  if (state.pendingQuarterlyReview) {
+    state.pendingQuarterlyReview = false;
+    saveState(state);
+    setTimeout(showQuarterlyReview, 300);
+    return;
+  }
+  // BDR reminder
   if (state.pendingBDRReminder) {
     state.pendingBDRReminder = false;
     saveState(state);
@@ -814,6 +1047,11 @@ window.newGame = function() {
 
 window.closeModal = closeModal;
 
+function _buildLeaderboardMigration() {
+  const names = ['Marcus Webb','Diana Park','Kevin Okafor','Elena Johansson','Patrick Ali','Fatima Brennan','George Schmidt','Yuki Martin'];
+  return names.map(name => ({ name, attainment: 40 + Math.floor(Math.random() * 90), dealsWon: Math.floor(Math.random() * 8), revenue: Math.floor(Math.random() * 400000) + 50000 }));
+}
+
 function initGame() {
   const saved = loadState();
   if (saved) {
@@ -829,6 +1067,34 @@ function initGame() {
     if (state.q1AboveQuota === undefined) state.q1AboveQuota = false;
     if (state.q2AboveQuota === undefined) state.q2AboveQuota = false;
     if (state.pendingBDRReminder === undefined) state.pendingBDRReminder = false;
+    // Sprint 3D state migrations
+    if (state.pendingMeeting === undefined)            state.pendingMeeting            = null;
+    if (state.pipelineReviewIgnoreCount === undefined) state.pipelineReviewIgnoreCount = 0;
+    if (state.pipelineReviewSentWeek === undefined)    state.pipelineReviewSentWeek    = -1;
+    if (state.pipelineReviewSubmitted === undefined)   state.pipelineReviewSubmitted   = false;
+    if (state.pipelineReviewEmailId === undefined)     state.pipelineReviewEmailId     = null;
+    if (!state.forecastSubmissions)                    state.forecastSubmissions       = {};
+    if (state.pendingFired === undefined)              state.pendingFired              = false;
+    // Sprint 4 state migrations
+    if (!state.playerSkills)               state.playerSkills            = [];
+    if (state.currentWinStreak === undefined) state.currentWinStreak    = 0;
+    if (state.winStreakPeak === undefined)  state.winStreakPeak          = 0;
+    if (state.winCount === undefined)      state.winCount               = 0;
+    if (!state.colleagueCommentsSent)      state.colleagueCommentsSent  = [];
+    if (!state.activeMarketEffects)        state.activeMarketEffects    = [];
+    if (!state.weeklySlideModifiers)       state.weeklySlideModifiers   = {};
+    if (state.pendingQuarterlyReview === undefined) state.pendingQuarterlyReview = false;
+    if (!state.leaderboard)               state.leaderboard            = _buildLeaderboardMigration();
+    if (state.pendingWinBanner === undefined)       state.pendingWinBanner = null;
+    // Add personality fields to existing opps missing them
+    state.opportunities.forEach(o => {
+      if (!o.personalityType)       o.personalityType     = 'analytical';
+      if (!o.personalityRevealed)   o.personalityRevealed = false;
+      if (o.temperature === undefined) o.temperature      = 75;
+      if (!o.temperatureHistory)    o.temperatureHistory  = [];
+      if (o.probBoost === undefined) o.probBoost          = 0;
+      if (!o.proposalMultiplier)    o.proposalMultiplier  = 1.0;
+    });
     // Retroactively unlock BDRs for old saves
     if (state.dayNumber >= 5 && !state.availableBDRs.includes('basic'))    state.availableBDRs.push('basic');
     if (state.dayNumber >= 20 && !state.availableBDRs.includes('standard')) state.availableBDRs.push('standard');
@@ -961,6 +1227,62 @@ window._fireBDR = function() {
   renderAll();
 };
 
+// ─── Meeting interruption card ───────────────────────────────────────────────
+
+function showMeetingInterruptionCard(meeting) {
+  const overlay = document.createElement('div');
+  overlay.className = 'meeting-overlay';
+  overlay.id = 'meeting-overlay';
+  overlay.innerHTML = `
+    <div class="meeting-card">
+      <div class="meeting-card-header">MEETING INVITE — ACCEPTED AUTOMATICALLY</div>
+      <div class="meeting-card-body">
+        <div style="font-size:13px;font-weight:bold;font-family:Arial,sans-serif;color:#000000;margin-bottom:6px">${meeting.subject}</div>
+        <div style="font-size:12px;font-family:Arial,sans-serif;color:#404040;line-height:1.6;margin-bottom:6px">${meeting.desc}</div>
+        <div style="font-size:10px;font-family:'Courier New',monospace;color:#808080">This costs 1 action.</div>
+        <button class="meeting-dismiss-btn" onclick="window._dismissMeeting()">Noted. There goes an hour.</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  window._dismissMeeting = () => {
+    state.actionsRemaining = Math.max(0, state.actionsRemaining - 1);
+    state.actionsUsedToday++;
+    saveState(state);
+    renderAll();
+    const el = document.getElementById('meeting-overlay');
+    if (el) el.remove();
+  };
+}
+
+// ─── Fired screen ─────────────────────────────────────────────────────────────
+
+function showFiredScreen() {
+  showModal(
+    'TERMINATION NOTICE — PIPELINE HEALTH SIM HR DEPARTMENT',
+    `<div style="text-align:center;padding:30px 20px;background:#000080;color:#ffffff;margin:-12px -14px">
+      <div style="font-size:48px;font-weight:900;font-family:Arial,sans-serif;letter-spacing:.05em;margin-bottom:16px">YOU'RE FIRED.</div>
+      <div style="font-size:14px;font-family:Arial,sans-serif;line-height:1.7;margin-bottom:24px">
+        Dave H. has terminated your employment effective immediately.<br>
+        Submitting your pipeline forecast is a non-negotiable requirement of this role.<br>
+        Your access has been revoked. Please return your ID badge.
+      </div>
+    </div>`,
+    [{ label: 'Try Again', primary: true, onclick: 'window._tryAgainFired()' }],
+    true
+  );
+  // Override modal close button to do nothing
+  const closeBtn = document.querySelector('#modal-box .modal-header .btn');
+  if (closeBtn) closeBtn.style.display = 'none';
+
+  window._tryAgainFired = () => {
+    clearState();
+    localStorage.removeItem('hasSeenIntro');
+    closeModal();
+    initGame();
+  };
+}
+
 // ─── BDR Monday Reminder ──────────────────────────────────────────────────────
 
 function getOppNextDeadline(o, today) {
@@ -1019,14 +1341,14 @@ function showBDRReminder() {
 
 function showOnboardingModal() {
   showModal(
-    'Welcome to Widget Wonders',
+    'Welcome to Pipeline Health Sim',
     `<div style="margin:-12px -14px 14px -14px">
-       <img src="opening.png" style="width:100%;display:block;border-bottom:2px solid #808080" alt="Widget Wonders">
+       <img src="opening.png" style="width:100%;display:block;border-bottom:2px solid #808080" alt="Pipeline Health Sim">
      </div>
      <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.75;color:#000000">
        The Senior Executive Sales Rep of Global Operations has retired after 40 years of service, and
-       <strong>Widget Wonders</strong> — the leader in widget manufacturing — has hired you to fill their shoes.
-       Widget Wonders has been the gold standard in widgets for over 40 years.
+       <strong>Pipeline Health Sim</strong> — the leader in widget manufacturing — has hired you to fill their shoes.
+       Pipeline Health Sim has been the gold standard in widgets for over 40 years.
        <br><br>
        Your job: build your book of business from scratch. You'll book demos, host presentations,
        schedule pricing meetings, present proposals, and close deals — all while managing a growing
@@ -1044,6 +1366,100 @@ function showOnboardingModal() {
     closeModal();
   };
 }
+
+// ─── Quarterly Review ────────────────────────────────────────────────────────
+
+function showQuarterlyReview() {
+  const hits = state.quarterMonthHits.filter(Boolean).length;
+  const tier = hits >= 3 ? 'gold' : hits >= 2 ? 'silver' : 'bronze';
+  const tierSkills = (SKILL_TREE[tier] || []).filter(s => !state.playerSkills.includes(s.id));
+
+  const shuffled = [...tierSkills].sort(() => Math.random() - 0.5).slice(0, 2);
+  if (shuffled.length === 0) {
+    showModal('QUARTERLY PERFORMANCE REVIEW',
+      `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.8">You have already unlocked all available ${tier.toUpperCase()} skills. Keep building your pipeline.\n\nMonths on quota this quarter: ${hits}/3</div>`,
+      [{ label: 'Continue', primary: true, onclick: 'window.closeModal()' }], true);
+    return;
+  }
+
+  let selectedSkillId = null;
+
+  const skillCards = shuffled.map((skill, i) => `
+    <div id="skill-card-${i}" class="skill-card" onclick="window._selectSkill('${skill.id}', ${i})"
+      style="flex:1;border:2px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;min-height:44px;background:var(--bg2)">
+      <div style="font-size:22px;margin-bottom:6px">${skill.icon}</div>
+      <div style="font-size:13px;font-weight:bold;margin-bottom:4px">${skill.label}</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5">${skill.desc}</div>
+    </div>`).join('');
+
+  showModal(
+    'QUARTERLY PERFORMANCE REVIEW',
+    `<div style="font-family:Arial,sans-serif">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px">
+        Months on quota: ${hits}/3 · Tier earned: <strong>${tier.toUpperCase()}</strong>
+      </div>
+      <div style="font-size:12px;margin-bottom:14px">Select one upgrade for next quarter:</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">${skillCards}</div>
+      <div id="skill-selection-note" style="font-size:12px;color:var(--text2);margin-top:10px;min-height:20px"></div>
+    </div>`,
+    [{ label: 'Confirm Upgrade', primary: true, onclick: 'window._confirmSkill()' }],
+    true
+  );
+
+  window._selectSkill = (skillId, cardIdx) => {
+    selectedSkillId = skillId;
+    document.querySelectorAll('.skill-card').forEach((el, i) => {
+      el.style.border = i === cardIdx ? '2px solid #378ADD' : '2px solid var(--border)';
+      el.style.background = i === cardIdx ? '#E6F1FB' : 'var(--bg2)';
+    });
+    const skill = shuffled.find(s => s.id === skillId);
+    const note = document.getElementById('skill-selection-note');
+    if (note && skill) note.textContent = `Selected: ${skill.label}`;
+  };
+
+  window._confirmSkill = () => {
+    if (!selectedSkillId) { alert('Please select an upgrade first.'); return; }
+    if (!state.playerSkills.includes(selectedSkillId)) state.playerSkills.push(selectedSkillId);
+    saveState(state);
+    closeModal();
+    showToast(`Skill unlocked: ${shuffled.find(s => s.id === selectedSkillId)?.label}`);
+  };
+}
+
+// ─── Leaderboard Modal ───────────────────────────────────────────────────────
+
+window._openLeaderboardModal = function() {
+  const playerAttainment = Math.round((state.won / state.quota) * 100);
+  const allEntries = [
+    { name: 'You', attainment: playerAttainment, isPlayer: true, revenue: state.won, dealsWon: state.wonDeals.length },
+    ...(state.leaderboard || []).map(c => ({ ...c, isPlayer: false }))
+  ].sort((a, b) => b.attainment - a.attainment);
+
+  const rows = allEntries.map((e, i) => {
+    const bg = e.isPlayer ? 'background:#000080;color:#ffffff;' : '';
+    const bold = e.isPlayer ? 'font-weight:bold;' : '';
+    return `<tr style="${bg}${bold}">
+      <td style="padding:4px 8px;font-size:12px">${i + 1}</td>
+      <td style="padding:4px 8px;font-size:12px">${e.name}</td>
+      <td style="padding:4px 8px;font-size:12px;text-align:right">${e.attainment}%</td>
+      <td style="padding:4px 8px;font-size:12px;text-align:right">$${(e.revenue || 0).toLocaleString()}</td>
+      <td style="padding:4px 8px;font-size:12px;text-align:right">${e.dealsWon || 0}</td>
+    </tr>`;
+  }).join('');
+
+  showModal('SALES LEADERBOARD — THIS QUARTER',
+    `<table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif">
+      <thead><tr style="background:var(--bg3)">
+        <th style="padding:4px 8px;font-size:11px;text-align:left">#</th>
+        <th style="padding:4px 8px;font-size:11px;text-align:left">Rep</th>
+        <th style="padding:4px 8px;font-size:11px;text-align:right">Attainment</th>
+        <th style="padding:4px 8px;font-size:11px;text-align:right">Revenue</th>
+        <th style="padding:4px 8px;font-size:11px;text-align:right">Deals</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`,
+    [{ label: 'Close', onclick: 'window.closeModal()' }], true);
+};
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 

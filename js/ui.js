@@ -4,10 +4,12 @@
  */
 
 import {
-  STAGES, formatDate, formatDateShort, dayNumberToDate,
+  STAGES, formatDate, formatDateShort, formatQuarterMonth, dayNumberToDate,
   getSeasonInfo, getActiveOpps, getPipelineSummary,
   ACTIONS_PER_DAY, getNextQuarterQuota, BDR_ROSTER,
 } from './engine.js';
+
+const PERSONALITY_ICONS = { analytical: '📊', relationshipBuilder: '🤝', impatient: '⚡', skeptic: '🔍', champion: '🏆' };
 
 const POSITIONS = [
   'Jr Sales Rep',
@@ -78,7 +80,7 @@ export function renderHeader(state) {
 
   document.getElementById('header-date').textContent = formatDate(state.date);
   document.getElementById('header-season').textContent =
-    `Q${state.date.quarter} · M${state.date.month} · W${state.date.week}${season.isSlow ? ' · Slow season' : ''}`;
+    formatQuarterMonth(state.date) + (season.isSlow ? ' · Slow season' : '');
   document.getElementById('quota-pct').textContent =
     `$${Math.round(state.monthRevenue / 1000)}k / $${Math.round(state.quota / 1000)}k`;
   const bar = document.getElementById('quota-bar');
@@ -211,6 +213,28 @@ export function renderEmailBody(state, emailId, onEmailAction) {
     }
   }
 
+  // Pipeline review inline form
+  if (e.type === 'pipeline-review' && !e.submitted) {
+    const activeOpps = state.opportunities.filter(o =>
+      o.stage !== STAGES.WON && o.stage !== STAGES.LOST
+    );
+    if (activeOpps.length > 0) {
+      const rows = activeOpps.map(o =>
+        `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid #c0c0c0;gap:8px">
+          <span style="font-size:11px;font-family:Arial,sans-serif;color:#000000">${o.company}</span>
+          <select id="fcst-${o.id}" style="font-size:11px;font-family:'Courier New',monospace;border:2px solid;border-color:#808080 #ffffff #ffffff #808080;background:#ffffff;min-height:22px;padding:0 4px">
+            ${[10,20,30,40,50,60,70,80,90].map(p => `<option value="${p}"${p === Math.round(o.prob/10)*10 ? ' selected' : ''}>${p}%</option>`).join('')}
+          </select>
+        </div>`
+      ).join('');
+      actionBtn = `<div style="margin-top:14px;border:2px solid;border-color:#808080 #ffffff #ffffff #808080;background:#d4d0c8;padding:8px">
+        <div style="font-size:10px;font-family:Arial,sans-serif;font-weight:bold;color:#000080;margin-bottom:6px">PIPELINE FORECAST FORM</div>
+        ${rows}
+        <button class="btn btn-primary" onclick="window._onForecastSubmit(${e.id})" style="margin-top:8px;font-size:11px">Submit Forecast</button>
+      </div>`;
+    }
+  }
+
   body.innerHTML = `
     <div style="padding:8px 10px;border-bottom:1px solid #808080;flex-shrink:0;background:#d4d0c8;">
       <button class="btn btn-sm mobile-back-btn" onclick="window._mobileEmailBack()" style="display:none;margin-bottom:8px">← Back</button>
@@ -230,7 +254,7 @@ export function renderEmailBody(state, emailId, onEmailAction) {
 
 // ─── Phone panel ──────────────────────────────────────────────────────────────
 
-export function renderPhone(state, onCallClick, onContactClick, activeTab) {
+export function renderPhone(state, onCallClick, onContactCallClick, activeTab, expandedContactId) {
   const container = document.getElementById('phone-body');
   if (!container) return;
 
@@ -245,21 +269,52 @@ export function renderPhone(state, onCallClick, onContactClick, activeTab) {
 
   let listHtml = '';
   if (tab === 'contacts') {
+    const bdrTier = (state.activeBDR
+      ? (BDR_ROSTER.find(b => b.id === state.activeBDR) || BDR_ROSTER[0]).tier
+      : 0);
+
     listHtml = allActive.length === 0
       ? `<div style="font-size:12px;color:var(--text3);font-style:italic;padding:6px 0">No active contacts</div>`
       : allActive.map(o => {
-          const isCallable  = o.stage === STAGES.LIVE_CALL || o.stage === STAGES.FUTURE;
-          const dot         = URGENCY_COLORS[o.urgency];
-          const stageLabel  = STAGE_SHORT[o.stage] || o.stage;
-          const stageBg     = (isCallable && o.stage === STAGES.LIVE_CALL) ? '#000080' : '#d4d0c8';
-          const stageColor  = (isCallable && o.stage === STAGES.LIVE_CALL) ? '#ffffff' : '#000000';
-          return `<div onclick="window._onContactClick(${o.id})" class="contact-item">
-            <div style="width:7px;height:7px;border-radius:50%;background:${dot};flex-shrink:0;margin-top:3px"></div>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:12px;font-weight:500">${o.name}</div>
-              <div style="font-size:11px;color:var(--text2)">${o.company}</div>
+          const dot        = URGENCY_COLORS[o.urgency];
+          const stageLabel = STAGE_SHORT[o.stage] || o.stage;
+          const isLive     = o.stage === STAGES.LIVE_CALL || o.stage === STAGES.FUTURE;
+          const stageBg    = (o.stage === STAGES.LIVE_CALL) ? '#000080' : '#d4d0c8';
+          const stageColor = (o.stage === STAGES.LIVE_CALL) ? '#ffffff' : '#000000';
+          const isExpanded = o.id === expandedContactId;
+
+          // Notes block (tier-dependent, shown when expanded)
+          let notesHtml = '';
+          if (isExpanded) {
+            const n = o.bdrNotes || {};
+            notesHtml = `<div style="margin:4px 0 6px 14px;background:#ffffff;border:2px solid;border-color:#808080 #ffffff #ffffff #808080;padding:6px 8px;font-family:Arial,sans-serif">`;
+            notesHtml += `<div style="font-size:10px;color:#808080;font-weight:bold;margin-bottom:3px">BUYER NOTES</div>`;
+            if (bdrTier === 0) {
+              notesHtml += `<div style="font-size:10px;color:#404040">No BDR assigned — no additional information available.</div>`;
+            } else {
+              notesHtml += `<div style="font-size:10px;color:#404040;line-height:1.6">${o.flavourNote || '—'}</div>`;
+              if (bdrTier >= 1) notesHtml += `<div style="font-size:10px;color:#808080;font-style:italic;margin-top:2px">Basic qualification complete.</div>`;
+              if (bdrTier >= 2 && n.budget) {
+                notesHtml += `<div style="font-size:10px;font-family:'Courier New',monospace;color:#000000;margin-top:4px;line-height:1.6">${n.budget}<br>${n.timeline}<br>Key contact: ${n.stakeholder}</div>`;
+              }
+              if (bdrTier >= 4 && n.competitive) {
+                notesHtml += `<div style="font-size:10px;font-family:'Courier New',monospace;color:#000000">Competitive: ${n.competitive}</div>`;
+              }
+            }
+            notesHtml += `<button class="btn btn-primary" onclick="event.stopPropagation();window._onContactCall(${o.id})" style="font-size:10px;margin-top:6px;min-height:28px">Call</button>`;
+            notesHtml += `</div>`;
+          }
+
+          return `<div>
+            <div onclick="window._onContactClick(${o.id})" class="contact-item" style="background:${isExpanded ? '#e8e8ff' : ''}">
+              <div style="width:7px;height:7px;border-radius:50%;background:${dot};flex-shrink:0;margin-top:3px"></div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:${isExpanded ? 'bold' : '500'}">${o.name}</div>
+                <div style="font-size:11px;color:var(--text2)">${o.company}</div>
+              </div>
+              <span style="font-size:10px;padding:1px 5px;border:1px solid #808080;background:${stageBg};color:${stageColor};white-space:nowrap;flex-shrink:0;font-family:Arial,sans-serif">${stageLabel}</span>
             </div>
-            <span style="font-size:10px;padding:1px 5px;border:1px solid #808080;background:${stageBg};color:${stageColor};white-space:nowrap;flex-shrink:0;font-family:Arial,sans-serif">${stageLabel}</span>
+            ${notesHtml}
           </div>`;
         }).join('');
   } else {
@@ -288,7 +343,7 @@ export function renderPhone(state, onCallClick, onContactClick, activeTab) {
 
   container.innerHTML = tabsHtml + `<div class="phone-list-scroll">${listHtml}</div>`;
   window._onCallClick    = onCallClick;
-  window._onContactClick = onContactClick;
+  window._onContactCall  = onContactCallClick;
 }
 
 // ─── Pipeline — Kanban only ───────────────────────────────────────────────────
@@ -299,8 +354,7 @@ export function renderPipeline(state, onKanbanCardClick) {
   const hasRiskFlags = bdrEntry.autoActions.includes('riskFlags');
 
   const el = document.getElementById('pipe-kanban');
-  el.innerHTML = `<div class="kanban-scroll"><div class="kanban-board">` +
-    KANBAN_COLUMNS.map(col => {
+  const colsHtml = KANBAN_COLUMNS.map(col => {
       // Demo Booked column shows both DEMO_SCHEDULED and DEMO_HOSTED
       const opps = getActiveOpps(state).filter(o =>
         o.stage === col.key ||
@@ -318,12 +372,21 @@ export function renderPipeline(state, onKanbanCardClick) {
         const riskWarn = (hasRiskFlags && o.urgency === 'red')
           ? `<span style="position:absolute;top:4px;right:${dot ? '18px' : '6px'};font-size:11px;line-height:1" title="At risk">⚠</span>`
           : '';
+        // Temperature thermometer
+        const temp = o.temperature || 75;
+        const tempColor = temp >= 76 ? '#1D9E75' : temp >= 51 ? '#EF9F27' : temp >= 26 ? '#378ADD' : '#808080';
+        const tempLabel = temp >= 76 ? 'Hot' : temp >= 51 ? 'Warm' : temp >= 26 ? 'Cooling' : 'Cold';
+        const tempIcon = `<span title="Relationship: ${tempLabel}" style="cursor:help;color:${tempColor};font-size:11px">🌡️</span>`;
+        const persIcon = o.personalityRevealed && PERSONALITY_ICONS[o.personalityType]
+          ? `<span title="${o.personalityType}" style="font-size:11px">${PERSONALITY_ICONS[o.personalityType]}</span>`
+          : '';
         return `<div
           onclick="window._onKanbanClick(${o.id})"
           style="background:#fffef0;border:1px solid #808080;border-radius:0;padding:5px 7px;margin-bottom:4px;cursor:pointer;position:relative"
         >
           <div style="font-size:11px;font-weight:bold;color:#000000;margin-bottom:1px;font-family:Arial,sans-serif">${o.company}</div>
           <div style="font-size:10px;color:#404040;line-height:1.4;font-family:'Courier New',monospace">${hint}</div>
+          <div style="margin-top:2px">${tempIcon}${persIcon}</div>
           ${riskWarn}
           ${dot ? `<div style="width:7px;height:7px;border-radius:50%;background:${dot};position:absolute;top:6px;right:6px"></div>` : ''}
         </div>`;
@@ -333,7 +396,24 @@ export function renderPipeline(state, onKanbanCardClick) {
         <div class="kanban-col-header">${col.label}</div>
         ${cards || `<div style="font-size:10px;color:var(--text3);font-style:italic">—</div>`}
       </div>`;
-    }).join('') + '</div></div>';
+    }).join('');
+
+  // ── SUSPENDED column ──
+  const suspendedOpps = state.opportunities.filter(o => o.stage === STAGES.SUSPENDED);
+  const suspendedCards = suspendedOpps.map(o => {
+    const resumeIn = o.resumeDay ? Math.max(0, o.resumeDay - state.dayNumber) : '?';
+    return `<div style="background:#e8e8e8;border:1px solid #808080;padding:5px 7px;margin-bottom:4px;opacity:0.8">
+      <div style="font-size:11px;font-weight:bold;color:#808080;font-family:Arial,sans-serif">⏸ ${o.company}</div>
+      <div style="font-size:10px;color:#808080;font-family:'Courier New',monospace">Resumes in ${resumeIn} days</div>
+    </div>`;
+  }).join('');
+
+  const suspendedCol = suspendedOpps.length > 0 ? `<div class="kanban-col kanban-suspended">
+    <div class="kanban-col-header" style="color:#808080">Suspended</div>
+    ${suspendedCards}
+  </div>` : '';
+
+  el.innerHTML = `<div class="kanban-scroll"><div class="kanban-board">${colsHtml}${suspendedCol}</div></div>`;
 
   window._onKanbanClick = onKanbanCardClick;
 }
@@ -354,6 +434,25 @@ export function renderStats(state) {
   _setStat('stat-pct',    pct + '%');
   _setStat('stat-quota',  `$${Math.round(state.quota/1000)}k`);
   _setStat('stat-nextq',  nextQText, nextQ > state.quota ? '#00aa00' : null);
+
+  // Leaderboard panel
+  const lbEl = document.getElementById('stat-leaderboard');
+  if (lbEl && state.leaderboard) {
+    const playerAtt = Math.round((state.won / state.quota) * 100);
+    const allEntries = [
+      { name: 'You', attainment: playerAtt, isPlayer: true },
+      ...state.leaderboard
+    ].sort((a, b) => b.attainment - a.attainment);
+    const top3 = allEntries.slice(0, 3);
+    const playerRank = allEntries.findIndex(e => e.isPlayer) + 1;
+    lbEl.innerHTML = top3.map((e, i) => {
+      const style = e.isPlayer ? 'font-weight:bold;color:#000080;' : '';
+      return `<span style="font-size:10px;font-family:Arial,sans-serif;${style}">${i+1}. ${e.name} ${e.attainment}%</span>`;
+    }).join('<br>') + (playerRank > 3 ? `<br><span style="font-size:10px;font-family:Arial,sans-serif;font-weight:bold;color:#000080">${playerRank}. You ${playerAtt}%</span>` : '');
+    lbEl.title = 'Click to see full leaderboard';
+    lbEl.style.cursor = 'pointer';
+    lbEl.onclick = () => window._openLeaderboardModal && window._openLeaderboardModal();
+  }
 }
 
 function _setStat(id, val, color = null) {
@@ -377,7 +476,7 @@ export function renderIdCard(state) {
   const position   = POSITIONS[qIdx];
 
   card.innerHTML = `
-    <div class="id-card-stripe">&#9632; WIDGET WONDERS INC. &#9632;</div>
+    <div class="id-card-stripe">&#9632; PIPELINE HEALTH SIM &#9632;</div>
     <div class="id-card-body">
       <img src="${avatarSrc}" class="id-card-avatar" alt="Employee photo">
       <button class="id-card-switch" onclick="window.switchAvatar()">Switch</button>

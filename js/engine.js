@@ -4,6 +4,8 @@
  * No DOM references. Pure logic.
  */
 
+export const VERSION = '0.4.0';
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const ACTIONS_PER_DAY         = 5;
@@ -21,6 +23,36 @@ export const QUOTA_MAX               = 250000;
 export const QUOTA_INCREASE_PCT      = 1.15;
 
 // ─── BDR Roster ───────────────────────────────────────────────────────────────
+
+// ─── Meeting interruption events ──────────────────────────────────────────────
+
+export const MEETING_EVENTS = [
+  { subject: 'Synergy Alignment Session', desc: "45 minutes discussing what 'synergy' actually means. No conclusion reached. A follow-up meeting was scheduled." },
+  { subject: 'Pipeline Hygiene Review', desc: "Dave pulled up your CRM and asked why three accounts have been 'In Progress' since February. You had no answer." },
+  { subject: 'All-Hands Culture Update', desc: "The CEO announced a new core value: Radical Candour. Nobody practised it. Nobody asked questions." },
+  { subject: 'Mandatory Unconscious Bias Training', desc: "You scored 4/10 on the quiz. The pass mark was 5. You have been automatically re-enrolled." },
+  { subject: 'Q3 Kickoff Pre-Planning Pre-Meeting', desc: "A meeting to plan the agenda for the meeting about Q3 planning. A third meeting may be required." },
+  { subject: 'Lunch & Learn: Effective Email Habits', desc: "The presenter sent a 47-slide deck by email at 8am. Nobody opened it. The irony was not addressed." },
+  { subject: 'CRM Data Quality Task Force', desc: "It was decided that everyone should update their CRM notes. This meeting was not added to the CRM." },
+  { subject: 'Brand Refresh Feedback Session', desc: "The new logo is the same as the old logo but slightly rounder. You spent 40 minutes discussing it." },
+  { subject: 'Sales Process Optimisation Workshop', desc: "A consultant explained your own job back to you using a framework he invented. You smiled and nodded." },
+  { subject: 'End of Quarter Lessons Learned', desc: "Everyone agreed last quarter was challenging. No lessons were recorded. Same time next quarter." },
+  { subject: 'Welcome Lunch for New Team Member', desc: "Dave hired someone. You spent an hour learning their name and immediately forgot it." },
+  { subject: 'Territory Alignment Review', desc: "Your accounts were reorganised. Two of your best leads are now someone else's. Dave called it an opportunity." },
+  { subject: 'Quarterly Business Review Prep', desc: "You were asked to prepare 12 slides by tomorrow. This meeting was to tell you that." },
+  { subject: 'IT Security Awareness Training', desc: "You were informed not to click suspicious emails. The training was delivered by email." },
+  { subject: 'Sales Methodology Refresher: MEDDIC', desc: "You have been through this training four times. The acronym changes slightly each year." },
+  { subject: 'Office Snack Policy Update', desc: "The healthy snack initiative has been extended. The biscuits are gone. Morale is low." },
+  { subject: 'Voice of the Customer Readout', desc: "Customers want faster response times and better pricing. Dave said this was very insightful." },
+  { subject: 'Competitive Intelligence Briefing', desc: "The competitor released a new feature. Your product team said they have been working on it for months. No ETA." },
+  { subject: 'Benefits Enrolment Reminder Session', desc: "HR explained the dental plan using a flowchart with 14 decision points. You chose the same plan as last year." },
+  { subject: 'Team Building: Virtual Escape Room', desc: "You did not escape. Nobody knows whose fault it was. Dave said it was still a great team exercise." },
+  { subject: 'New Expense Policy Walkthrough', desc: "Receipts must now be submitted within 48 hours. The new portal does not work on Safari." },
+  { subject: 'Go-To-Market Strategy Alignment', desc: "Marketing and Sales disagreed on the ICP for the third consecutive quarter. A working group was formed." },
+  { subject: 'Forecast Call', desc: "Dave asked everyone to be more conservative and more aggressive at the same time. You wrote nothing down." },
+  { subject: 'Customer Advisory Board Debrief', desc: "Customers gave feedback. The feedback was described as directional. No action items were assigned." },
+  { subject: 'Celebrating 40 Years of Widget Wonders', desc: "There was cake. It was good. This was the only productive part of your day." },
+];
 
 export const BDR_ROSTER = [
   {
@@ -91,6 +123,7 @@ export const STAGES = {
   FUTURE:            'future',
   WON:               'won',
   LOST:              'lost',
+  SUSPENDED:         'suspended',
 };
 
 // Booking rates (expected new opps per 5-day game week), by game-month 1–12
@@ -118,12 +151,26 @@ export function dayNumberToDate(dayNum) {
   return { quarter, month, week, day, gameMonth };
 }
 
+const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
 export function formatDate(date) {
-  return `Q${date.quarter}·M${date.month}·W${date.week}·D${date.day}`;
+  // Returns "Week 3 · Wednesday"
+  const weekInGame = (date.quarter - 1) * 12 + (date.month - 1) * 4 + date.week;
+  return `Week ${weekInGame} · ${DAY_NAMES[date.day - 1]}`;
 }
 
 export function formatDateShort(date) {
-  return `W${date.week}D${date.day}`;
+  // Returns "Wk3 · Mon"
+  const weekInGame = (date.quarter - 1) * 12 + (date.month - 1) * 4 + date.week;
+  return `Wk${weekInGame} · ${DAY_SHORT[date.day - 1]}`;
+}
+
+export function formatQuarterMonth(date) {
+  // Returns "Q2 · Month 3" — used in header only
+  const monthLabels = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const gmLabel = monthLabels[(date.gameMonth - 1) % 12] || `Month ${date.gameMonth}`;
+  return `Q${date.quarter} · ${gmLabel}`;
 }
 
 export function getSeasonInfo(gameMonth) {
@@ -253,12 +300,22 @@ export function buildBookingEmailBody(opp, bdrTier, bdrName) {
     const n = opp.bdrNotes || {};
     if (n.competitive) body += `\nCompetitive intel: ${n.competitive}`;
   }
+  if (bdrTier >= 1) {
+    const pers = BUYER_PERSONALITIES[opp.personalityType];
+    if (pers && pers.bdrHints) {
+      const hintKey = `tier${bdrTier}`;
+      if (pers.bdrHints[hintKey]) {
+        body += `\n\nPersonality note: ${pers.bdrHints[hintKey]}`;
+      }
+    }
+  }
   return body;
 }
 
 // ─── Urgency ──────────────────────────────────────────────────────────────────
 
 export function calcUrgency(opp, dayNumber) {
+  if (opp.stage === STAGES.SUSPENDED) return 'green'; // suspended opps never show urgency
   if (opp.stage === STAGES.PRE_DEMO) {
     const d = opp.scheduleBy - dayNumber;
     return d <= 0 ? 'red' : d === 1 ? 'amber' : 'green';
@@ -304,6 +361,187 @@ const SPAM_POOL = [
   { from: 'hr@company-internal.com', subject: 'Action required: update your emergency contacts', body: 'Please log in to the HR portal and verify your emergency contact information.\n\n[LOW PRIORITY]' },
 ];
 
+// ── DATA SECTION ──────────────────────────────────────────────────────────────
+
+export const BUYER_PERSONALITIES = {
+  analytical: {
+    label: 'Analytical', icon: '📊',
+    traits: 'Data-driven, methodical, penalises fluff, rewards specificity',
+    slideWeightModifiers: { roi: 2, cost: 2, technical: 2, social: -2, market: -2, roadmap: -1 },
+    temperatureDecayRate: 0.8,
+    callBonusMultiplier: 1.0,
+    bdrHints: {
+      tier1: 'Comes across as thorough. Asks a lot of detailed questions.',
+      tier2: 'Analytical buyer. Likely CFO or finance background. Will want data not stories.',
+      tier3: 'Confirmed analytical profile. Lead with ROI and TCO slides. Avoid market positioning entirely.',
+      tier4: 'Analytical CFO-type. Evaluating 2 other vendors on price. A detailed TCO comparison will win this.'
+    }
+  },
+  relationshipBuilder: {
+    label: 'Relationship Builder', icon: '🤝',
+    traits: 'Warms up with contact, rewards pre-demo calls, cools if ignored between steps',
+    slideWeightModifiers: { social: 2, support: 2, trust: 2, technical: -1, market: -1 },
+    temperatureDecayRate: 1.5,
+    callBonusMultiplier: 1.3,
+    bdrHints: {
+      tier1: 'Very friendly on the phone. Easy to talk to.',
+      tier2: 'Relationship-driven buyer. Will respond well to being contacted before the demo.',
+      tier3: 'Strong relationship buyer. Call them before every meeting — it matters to them.',
+      tier4: 'Relationship Builder. Their last vendor lost them because of poor post-sale support.'
+    }
+  },
+  impatient: {
+    label: 'Impatient', icon: '⚡',
+    traits: 'Faster deadlines, decides quickly when ready, penalised by delays',
+    slideWeightModifiers: { speed: 3, ease: 2, roi: 1, roadmap: -3, technical: -2 },
+    temperatureDecayRate: 2.0,
+    callBonusMultiplier: 0.8,
+    deadlineModifier: 0.7,
+    bdrHints: {
+      tier1: 'Short emails. Gets to the point fast.',
+      tier2: 'Impatient buyer type. Do not let steps drag. They notice delays.',
+      tier3: 'Impatient profile. Their live call window is shorter than usual. Lead with time-to-value.',
+      tier4: 'Impatient ops director. Has a board deadline in 6 weeks. Move fast or lose them.'
+    }
+  },
+  skeptic: {
+    label: 'Skeptic', icon: '🔍',
+    traits: 'Low base probability but high reward for correct dialogue',
+    slideWeightModifiers: { trust: 3, social: 3, security: 2, market: -3, features: -2, roadmap: -2 },
+    temperatureDecayRate: 1.0,
+    callBonusMultiplier: 1.2,
+    baseProbModifier: -15,
+    bdrHints: {
+      tier1: 'Seems a bit guarded. Hard to read.',
+      tier2: 'Skeptical buyer. Will push back on claims. Come prepared with evidence.',
+      tier3: 'Confirmed skeptic. Do not use superlatives. Lead with references, trust, and security slides.',
+      tier4: 'Skeptic who was burned by a vendor 2 years ago. A reference call with a similar company will unlock this deal.'
+    }
+  },
+  champion: {
+    label: 'Champion', icon: '🏆',
+    traits: 'Enthusiastic but low authority — identify the real decision maker',
+    slideWeightModifiers: { social: 2, ease: 2, features: 2, cost: -1 },
+    temperatureDecayRate: 0.7,
+    callBonusMultiplier: 1.5,
+    hiddenStakeholder: true,
+    bdrHints: {
+      tier1: 'Very enthusiastic. Loves the product already.',
+      tier2: 'Champion buyer — they want this but may not have final authority. Find out who signs.',
+      tier3: 'Champion profile. Their enthusiasm is real but the CFO or VP makes the final call.',
+      tier4: 'Champion in Procurement. Real decision maker is their CFO, Marcus Webb.'
+    }
+  }
+};
+
+const PERSONALITY_WEIGHTS = [
+  { type: 'analytical',         weight: 20 },
+  { type: 'relationshipBuilder',weight: 20 },
+  { type: 'impatient',          weight: 15 },
+  { type: 'skeptic',            weight: 25 },
+  { type: 'champion',           weight: 20 },
+];
+
+function pickPersonality() {
+  const total = PERSONALITY_WEIGHTS.reduce((s, p) => s + p.weight, 0);
+  let r = Math.random() * total;
+  for (const p of PERSONALITY_WEIGHTS) { r -= p.weight; if (r <= 0) return p.type; }
+  return 'skeptic';
+}
+
+export const MARKET_EVENTS = [
+  { id: 'award_win',          subject: 'Good news — Widget Wonders takes home the industry award',
+    daveText: 'Team, Widget Wonders just won the Manufacturing Innovation Award for the third consecutive year. Buyers are noticing. Expect some goodwill this week.',
+    effect: 'allOppsCloseProbBoost', magnitude: 5, duration: 5 },
+  { id: 'economic_uncertainty', subject: 'Heads up — market conditions looking choppy',
+    daveText: 'Finance teams across our target sectors are being told to tighten budgets. Expect some resistance this week. Push your strongest value cases.',
+    effect: 'randomOppsCloseProbDrop', magnitude: 10, affectedCount: 2 },
+  { id: 'competitor_launch',   subject: 'Competitor alert — Acme Widgets launched something new',
+    daveText: 'Acme dropped a new product yesterday. Early reviews are mixed but expect buyers to bring it up. The technical slides are going to matter more this week.',
+    effect: 'slideWeightShift', affectedTags: ['technical', 'security'], magnitude: 2 },
+  { id: 'acquisition',         subject: 'One of your accounts may have just been acquired',
+    daveText: 'There are rumours of consolidation in the sector. Check your pipeline — if any of your buyers work for a company that just changed ownership, expect a pause.',
+    effect: 'randomOppSuspended', affectedCount: 1, suspendDays: 20 },
+  { id: 'referral_incoming',   subject: 'Warm lead incoming — a happy customer sent someone your way',
+    daveText: 'Great news. One of our existing accounts referred a contact. I have forwarded their details to the CRM. Should be a friendly one.',
+    effect: 'bonusOppGenerated', probBonus: 20, valueBonus: 1.2 },
+  { id: 'quarter_end_flush',   subject: 'End of quarter — buyers are spending',
+    daveText: 'It is that time. Finance teams are burning remaining budget before quarter close. Any deal in your live call stage should be your absolute priority this week.',
+    effect: 'liveCallOppsBoost', magnitude: 15, duration: 5 },
+  { id: 'trade_show',          subject: 'Widget World Expo this week — buyers are in learning mode',
+    daveText: 'The annual expo is running. Buyers are in research mode and open to conversations. Demo requests tend to spike. Stay sharp.',
+    effect: 'inboundRateBoost', magnitude: 1.5, duration: 5 },
+  { id: 'press_coverage',      subject: 'We made the trade press — positive coverage',
+    daveText: 'Widget Wonders got a write-up in Manufacturing Weekly. Three of our customer stories were featured. Skeptical buyers may be more receptive this week.',
+    effect: 'skepticOppsBoost', magnitude: 10 },
+  { id: 'slow_news',           subject: 'Quiet week out there',
+    daveText: 'Not much happening in the market this week. No news is good news I suppose. Focus on the pipeline and make progress on your relationships.',
+    effect: 'none' },
+  { id: 'budget_season',       subject: 'Budget planning season — decision timelines shifting',
+    daveText: 'A lot of our buyers are in annual budget planning mode. Expect slower responses but bigger decisions.',
+    effect: 'futureOppsValueBoost', magnitude: 1.15 },
+  { id: 'staffing_changes',    subject: 'Heads up — leadership changes at several accounts',
+    daveText: 'Heard from a few contacts that there have been some VP-level changes. Champions may have lost their sponsor.',
+    effect: 'championOppsTemperatureDrop', magnitude: 15 },
+  { id: 'widget_shortage',     subject: 'Supply chain news — actually works in our favour',
+    daveText: 'Widget supply issues in the market are pushing companies to get their operations in order. Good week to push on operational pain points.',
+    effect: 'operationsBuyerBoost', magnitude: 8 },
+];
+
+export const SKILL_TREE = {
+  bronze: [
+    { id: 'closer_instinct',  label: 'Closer Instinct',  icon: '🎯', desc: 'Close call dialogue scores carry a permanent +5 probability bonus on all future close calls.', effect: 'closeCallProbBonus', magnitude: 5 },
+    { id: 'quick_scheduler',  label: 'Quick Scheduler',  icon: '📅', desc: 'Scheduling a demo or pricing meeting costs 0 actions instead of 1.', effect: 'schedulingFree' },
+    { id: 'thick_skin',       label: 'Thick Skin',       icon: '🛡️', desc: 'Lost deals no longer reduce your win streak.', effect: 'streakProtection' },
+    { id: 'speed_reader',     label: 'Speed Reader',     icon: '⚡', desc: 'The maths proposal mini-game timer extends to 15 seconds instead of 10.', effect: 'proposalTimerExtend', magnitude: 5 },
+  ],
+  silver: [
+    { id: 'slide_master',         label: 'Slide Master',        icon: '🃏', desc: 'Two slides per demo show a star hint indicating good picks for this buyer.', effect: 'slidePicker2Hints' },
+    { id: 'relationship_player',  label: 'Relationship Player', icon: '🤝', desc: 'Pre-demo and pre-pricing calls cost 0 actions. Temperature boosts doubled.', effect: 'callsAreFree' },
+    { id: 'pattern_recognition',  label: 'Pattern Recognition', icon: '🔎', desc: 'Buyer personality type is revealed on the kanban card after the demo is hosted.', effect: 'personalityRevealPostDemo' },
+    { id: 'confident_opener',     label: 'Confident Opener',    icon: '📞', desc: 'The first dialogue round of every call is automatically scored as correct.', effect: 'autoCorrectRound1' },
+  ],
+  gold: [
+    { id: 'deal_anchor',    label: 'Deal Anchor',    icon: '⚓', desc: 'Buyer walkaway risk in Deal or No Deal starts 20% lower.', effect: 'walkawayRiskReduction', magnitude: 20 },
+    { id: 'market_reader',  label: 'Market Reader',  icon: '📰', desc: "Dave's weekly market email now includes the mechanical effect description.", effect: 'marketEventTransparency' },
+    { id: 'elite_closer',   label: 'Elite Closer',   icon: '💼', desc: 'Win rate on fully completed opportunities increases.', effect: 'winRateBoost', magnitude: 0.07 },
+    { id: 'time_lord',      label: 'Time Lord',      icon: '⏱️', desc: 'Gain 1 bonus action every Monday.', effect: 'mondayBonusAction' },
+  ],
+};
+
+export const COLLEAGUE_COMMENTS = [
+  { from: 'Marcus Webb', subject: 'Nice work', body: "Heard you closed one — nice work. Buy you a coffee sometime?" },
+  { from: 'Diana Park', subject: 'Big deal', body: "That last one was a big deal. Well done." },
+  { from: 'Kevin Okafor', subject: 'You\'re making us look bad', body: "Saw the CRM update. Three closes this month — you're making the rest of us look bad." },
+  { from: 'Elena Johansson', subject: 'Quick question', body: "Quick one — how did you handle that last objection? Want to steal your approach." },
+  { from: 'Patrick Ali', subject: 'Leaderboard', body: "Just saw the leaderboard. You've moved up. Impressive." },
+  { from: 'Fatima Brennan', subject: 'Dave mentioned you', body: "Nice work on the numbers. Dave mentioned you in the all-hands." },
+  { from: 'George Schmidt', subject: 'How did you crack them?', body: "Tried to call that account last month and got nowhere. How did you do it?" },
+  { from: 'Yuki Martin', subject: 'Bonus structure', body: "Heard the bonus structure is changing. If your streak keeps up you should do well." },
+  { from: 'Marcus Webb', subject: 'Talk of the floor', body: "You're the talk of the floor. Keep it up." },
+  { from: 'Diana Park', subject: 'Legend', body: "Legend. That's all." },
+];
+
+const FAREWELL_TEMPLATES = {
+  won: {
+    analytical: (name) => `${name} here. The numbers checked out. Looking forward to getting started. Please send the onboarding documentation.`,
+    relationshipBuilder: (name) => `Really glad we got to work together on this. Your team made the process easy. See you at kick-off.`,
+    impatient: (name) => `Done. Contract signed. Let's get moving — when can we start implementation?`,
+    skeptic: (name) => `I'll be honest — I was not sure at first. But you addressed my concerns directly. That mattered.`,
+    champion: (name) => `I have been pushing for this internally for weeks. So glad it finally happened. The team is excited.`,
+  },
+  lost: {
+    analytical: (name) => `We went with a vendor whose TCO model was more detailed. Nothing personal.`,
+    relationshipBuilder: (name) => `I really enjoyed our conversations. The timing just wasn't right. I'll keep you in mind.`,
+    impatient: (name) => `We needed to move faster. We've signed elsewhere. Good luck.`,
+    skeptic: (name) => `Couldn't get comfortable with the risk. May revisit in future.`,
+    champion: (name) => `My VP went a different direction. Out of my hands. Sorry.`,
+  },
+  nad: {
+    _all: (name) => `${name}: Appreciate your time. Not the right moment for us. I'll be in touch if that changes.`,
+  },
+};
+
 // ─── Opportunity generation ───────────────────────────────────────────────────
 
 let _oppIdCounter = 100;
@@ -316,7 +554,7 @@ export function generateOpportunity(gameState) {
 
   const flavour   = randomFrom(FLAVOUR_NOTES);
 
-  return {
+  const opp = {
     id:             ++_oppIdCounter,
     name:           randomFrom(FIRST_NAMES) + ' ' + randomFrom(LAST_NAMES),
     company:        randomFrom(COMPANIES),
@@ -341,7 +579,35 @@ export function generateOpportunity(gameState) {
 
     urgency: 'green',
     log: [`${formatDate(gameState.date)}: Inbound booking received`],
+
+    // Sprint 4
+    personalityType:     pickPersonality(),
+    personalityRevealed: false,
+    temperature:         75,
+    temperatureHistory:  [],
+    probBoost:           0,
+    proposalMultiplier:  1.0,
   };
+
+  // Apply personality modifiers
+  const pers = BUYER_PERSONALITIES[opp.personalityType];
+  if (pers) {
+    if (pers.baseProbModifier) opp.prob = Math.max(10, opp.prob + pers.baseProbModifier);
+    if (pers.deadlineModifier) opp.scheduleBy = Math.max(1, Math.floor(DEMO_SCHEDULE_DEADLINE * pers.deadlineModifier) + gameState.dayNumber);
+  }
+  return opp;
+}
+
+// ─── Leaderboard builder ──────────────────────────────────────────────────────
+
+function _buildLeaderboard() {
+  const names = ['Marcus Webb','Diana Park','Kevin Okafor','Elena Johansson','Patrick Ali','Fatima Brennan','George Schmidt','Yuki Martin'];
+  return names.map(name => ({
+    name,
+    attainment: 40 + Math.floor(Math.random() * 90), // 40–130%
+    dealsWon:   Math.floor(Math.random() * 8),
+    revenue:    Math.floor(Math.random() * 400000) + 50000,
+  }));
 }
 
 // ─── Initial state ────────────────────────────────────────────────────────────
@@ -378,7 +644,36 @@ export function createInitialState() {
     q1AboveQuota:       false,
     q2AboveQuota:       false,
     pendingBDRReminder: false,
+
+    // Meeting interruptions
+    pendingMeeting:     null,
+
+    // Pipeline review
+    pipelineReviewIgnoreCount: 0,
+    pipelineReviewSentWeek:    -1,
+    pipelineReviewSubmitted:   false,
+    pipelineReviewEmailId:     null,
+    forecastSubmissions:       {},
+    pendingFired:              false,
+
+    // Sprint 4
+    playerSkills:            [],
+    currentWinStreak:        0,
+    winStreakPeak:            0,
+    winCount:                0,
+    colleagueCommentsSent:   [],
+    activeMarketEffects:     [],
+    weeklySlideModifiers:    {},
+    pendingQuarterlyReview:  false,
+    leaderboard:             _buildLeaderboard(),
+    pendingWinBanner:        null,
   };
+}
+
+// ─── Skill helper ─────────────────────────────────────────────────────────────
+
+export function hasSkill(state, skillId) {
+  return Array.isArray(state.playerSkills) && state.playerSkills.includes(skillId);
 }
 
 // ─── Action handlers ──────────────────────────────────────────────────────────
@@ -402,8 +697,7 @@ export function actionScheduleDemo(state, oppId, chosenDayOffset) {
       o.demoDay = demoDay;
       o.log.push(`${formatDate(draft.date)}: Demo scheduled for ${formatDate(dayNumberToDate(demoDay))}`);
       draft.calendarEvents.push({ day: demoDay, oppId, type: 'demo' });
-      draft.actionsRemaining--;
-      draft.actionsUsedToday++;
+      if (!hasSkill(draft, 'schedulingFree')) { draft.actionsRemaining--; draft.actionsUsedToday++; }
       draft.emails.push(makeEmail({
         from: 'CRM System',
         subject: `Demo confirmed — ${opp.company}`,
@@ -440,6 +734,16 @@ export function actionHostDemo(state, oppId, miniGameScore) {
       o.log.push(`${formatDate(draft.date)}: Demo hosted. Grade ${grade}. Prob → ${o.prob}%`);
       draft.actionsRemaining--;
       draft.actionsUsedToday++;
+      // Personality reveal after demo (pattern_recognition skill)
+      if (hasSkill(draft, 'personalityRevealPostDemo')) o.personalityRevealed = true;
+      // Temperature boost for hosting demo on time
+      if (o.demoDay !== null && draft.dayNumber <= o.demoDay) {
+        o.temperature = Math.min(100, (o.temperature || 75) + 5);
+      }
+      // Champion: stakeholder flag
+      if (o.personalityType === 'champion' && !o._championStakeholderSent) {
+        o._championStakeholderSent = true;
+      }
       draft.emails.push(makeEmail({
         from: 'CRM System',
         subject: `Demo complete — schedule pricing for ${opp.company}`,
@@ -479,8 +783,7 @@ export function actionSchedulePricing(state, oppId, chosenDayOffset) {
       o.pricingDay = pricingDay;
       o.log.push(`${formatDate(draft.date)}: Pricing meeting scheduled for ${formatDate(dayNumberToDate(pricingDay))}`);
       draft.calendarEvents.push({ day: pricingDay, oppId, type: 'pricing' });
-      draft.actionsRemaining--;
-      draft.actionsUsedToday++;
+      if (!hasSkill(draft, 'schedulingFree')) { draft.actionsRemaining--; draft.actionsUsedToday++; }
       draft.emails.push(makeEmail({
         from: 'CRM System',
         subject: `Pricing meeting set — ${opp.company}`,
@@ -489,17 +792,26 @@ export function actionSchedulePricing(state, oppId, chosenDayOffset) {
         type: 'confirm',
         oppId,
       }));
+      // Champion: stakeholder email
+      if (o.personalityType === 'champion' && !o._championStakeholderSent) {
+        o._championStakeholderSent = true;
+        draft.emails.push(makeEmail({
+          from: 'CRM System', subject: `Note — ${o.company} may have additional decision makers`,
+          body: `${o.name} mentioned they need to loop in a colleague before the pricing meeting. You may be presenting to more than one person.`,
+          time: formatDate(draft.date), type: 'info', oppId: o.id,
+        }));
+      }
     }
   };
 }
 
-export function actionBuildProposal(state, oppId, miniGameScore) {
+export function actionBuildProposal(state, oppId, miniGameScore, valueMultiplier = 1.0) {
   const opp = state.opportunities.find(o => o.id === oppId);
   if (!opp)                              return { success: false, message: 'Opportunity not found.' };
   if (opp.stage !== STAGES.PROPOSAL)     return { success: false, message: 'Not in proposal stage.' };
   if (state.actionsRemaining <= 0)       return { success: false, message: 'No actions remaining today.' };
 
-  const probAdjust = miniGameScore >= 70 ? 5 : miniGameScore >= 50 ? 0 : -5;
+  const probAdjust = miniGameScore >= 90 ? 15 : miniGameScore >= 70 ? 8 : miniGameScore >= 50 ? 0 : -5;
 
   return {
     success: true,
@@ -508,8 +820,9 @@ export function actionBuildProposal(state, oppId, miniGameScore) {
       const o = draft.opportunities.find(x => x.id === oppId);
       o.stage              = STAGES.PRICING_SCHEDULED;
       o.proposalBuiltDay   = draft.dayNumber;
+      o.proposalMultiplier = valueMultiplier;
       o.prob               = Math.max(5, Math.min(95, o.prob + probAdjust));
-      o.log.push(`${formatDate(draft.date)}: Proposal built. Score ${miniGameScore}. Prob → ${o.prob}%`);
+      o.log.push(`${formatDate(draft.date)}: Proposal built. Score ${miniGameScore}. Mult ${valueMultiplier}. Prob → ${o.prob}%`);
       draft.actionsRemaining--;
       draft.actionsUsedToday++;
     }
@@ -550,22 +863,52 @@ export function actionHostPricing(state, oppId, miniGameScore, finalValue = null
   };
 }
 
+export function actionBuyerWalkaway(state, oppId) {
+  const opp = state.opportunities.find(o => o.id === oppId);
+  if (!opp) return { success: false, message: 'Opportunity not found.' };
+  return {
+    success: true,
+    apply(draft) {
+      const o = draft.opportunities.find(x => x.id === oppId);
+      o.stage = STAGES.LOST;
+      o.log.push(`${formatDate(draft.date)}: LOST — buyer walked away during pricing meeting`);
+      draft.actionsRemaining = Math.max(0, draft.actionsRemaining - 1);
+      draft.actionsUsedToday++;
+      draft.emails.push(makeEmail({
+        from: 'CRM System',
+        subject: `Lost — ${o.company} walked away`,
+        body: `${o.name} at ${o.company} withdrew during the pricing meeting.\n\nThey had seen enough. Deal lost.\n\nDeal value lost: $${o.value.toLocaleString()}`,
+        time: formatDate(draft.date), type: 'loss', oppId: o.id,
+      }));
+    }
+  };
+}
+
 export function actionCloseCall(state, oppId, miniGameScore) {
   const opp = state.opportunities.find(o => o.id === oppId);
   if (!opp)                              return { success: false, message: 'Opportunity not found.' };
   if (opp.stage !== STAGES.LIVE_CALL)    return { success: false, message: 'Not in live call stage.' };
   if (state.actionsRemaining <= 0)       return { success: false, message: 'No actions remaining today.' };
 
-  const probAdjust = miniGameScore >= 80 ? 15 : miniGameScore >= 50 ? 5 : -10;
+  const probAdjust = miniGameScore >= 100 ? 15 : miniGameScore >= 75 ? 8 : miniGameScore >= 50 ? 3 : miniGameScore >= 25 ? -5 : -15;
   const bdrEntry   = getActiveBDR(state);
   const bdrMod     = Math.round((bdrEntry.closeRateModifier || 0) * 100);
-  const finalProb  = Math.max(5, Math.min(95, opp.prob + probAdjust + bdrMod));
-  const roll       = Math.random() * 100;
+
+  // Temperature modifier on close
+  const temp    = opp.temperature || 75;
+  const tempMod = temp >= 76 ? 10 : temp >= 51 ? 0 : temp >= 26 ? -10 : -20;
+
+  const closeBonus    = hasSkill(state, 'closeCallProbBonus') ? 5 : 0;
+  const finalProb     = Math.max(5, Math.min(95, opp.prob + (opp.probBoost || 0) + probAdjust + bdrMod + tempMod + closeBonus));
+  const roll          = Math.random() * 100;
+
+  // Win rate adjustment for elite_closer skill
+  const effectiveWinRate = WIN_RATE + (hasSkill(state, 'winRateBoost') ? 0.07 : 0);
 
   let outcome;
-  if (roll < finalProb * WIN_RATE)                          outcome = 'won';
-  else if (roll < finalProb * (WIN_RATE + LOSS_RATE))       outcome = 'lost';
-  else                                                       outcome = 'nad';
+  if (roll < finalProb * effectiveWinRate)                              outcome = 'won';
+  else if (roll < finalProb * (effectiveWinRate + LOSS_RATE))           outcome = 'lost';
+  else                                                                   outcome = 'nad';
 
   return {
     success: true,
@@ -590,12 +933,59 @@ export function actionCloseCall(state, oppId, miniGameScore) {
           body: `Congratulations! ${o.name} at ${o.company} has signed.\n\n$${o.value.toLocaleString()} added to your total.\n\nYou're now at $${draft.won.toLocaleString()} total won this quarter.`,
           time: formatDate(draft.date), type: 'win', oppId,
         }));
+        // Win streak tracking
+        draft.currentWinStreak = (draft.currentWinStreak || 0) + 1;
+        draft.winCount = (draft.winCount || 0) + 1;
+        if (draft.currentWinStreak > (draft.winStreakPeak || 0)) draft.winStreakPeak = draft.currentWinStreak;
+        // Update leaderboard player attainment
+        draft._leaderboardPlayerAttainment = Math.round((draft.won / draft.quota) * 100);
+        // 5-streak Dave email
+        if (draft.currentWinStreak === 5) {
+          draft.emails.push(makeEmail({
+            from: 'Manager — Dave H.', subject: 'Sales rep of the month looking very possible',
+            body: 'Whatever you are doing, keep doing it. That is a five-deal streak. Sales rep of the month is looking very possible.\n\nDave',
+            time: formatDate(draft.date), type: 'manager',
+          }));
+        }
+        // Colleague comment every 3rd win
+        if (draft.winCount % 3 === 0) {
+          const unsent = COLLEAGUE_COMMENTS.filter((_, i) => !(draft.colleagueCommentsSent || []).includes(i));
+          if (unsent.length > 0) {
+            const idx = COLLEAGUE_COMMENTS.indexOf(unsent[0]);
+            const cc = unsent[0];
+            draft.emails.push(makeEmail({
+              from: cc.from, subject: cc.subject, body: cc.body,
+              time: formatDate(draft.date), type: 'colleague',
+            }));
+            (draft.colleagueCommentsSent = draft.colleagueCommentsSent || []).push(idx);
+          }
+        }
+        // Farewell email from buyer (won)
+        const wonPers = o.personalityType || 'analytical';
+        const wonFarewellFn = (FAREWELL_TEMPLATES.won[wonPers] || FAREWELL_TEMPLATES.won.analytical);
+        draft.emails.push(makeEmail({
+          from: `${o.name} — ${o.company}`, subject: `Re: Next steps`,
+          body: wonFarewellFn(o.name.split(' ')[0]),
+          time: formatDate(draft.date), type: 'win', oppId,
+        }));
+        // Trigger win banner
+        draft.pendingWinBanner = { company: o.company, value: o.value };
       } else if (outcome === 'lost') {
         o.stage = STAGES.LOST;
+        // Win streak reset (unless thick_skin skill)
+        if (!hasSkill(draft, 'streakProtection')) draft.currentWinStreak = 0;
         draft.emails.push(makeEmail({
           from: 'CRM System',
           subject: `Lost — ${o.company} went with a competitor`,
           body: `${o.name} at ${o.company} has decided to go with another solution.\n\nDeal value lost: $${o.value.toLocaleString()}.`,
+          time: formatDate(draft.date), type: 'loss', oppId,
+        }));
+        // Farewell email (lost)
+        const lostPers = o.personalityType || 'analytical';
+        const lostFarewellFn = (FAREWELL_TEMPLATES.lost[lostPers] || FAREWELL_TEMPLATES.lost.analytical);
+        draft.emails.push(makeEmail({
+          from: `${o.name} — ${o.company}`, subject: `Re: Our evaluation`,
+          body: lostFarewellFn(o.name.split(' ')[0]),
           time: formatDate(draft.date), type: 'loss', oppId,
         }));
       } else {
@@ -605,6 +995,12 @@ export function actionCloseCall(state, oppId, miniGameScore) {
           from: 'CRM System',
           subject: `No decision — ${o.company} moved to futures`,
           body: `${o.name} at ${o.company} is not ready to move forward right now.\n\nAdded to your futures book. You have ${FUTURE_REBOOK_WINDOW} days to rebook.`,
+          time: formatDate(draft.date), type: 'info', oppId,
+        }));
+        // NAD farewell email
+        draft.emails.push(makeEmail({
+          from: `${o.name} — ${o.company}`, subject: `Re: Our conversation`,
+          body: FAREWELL_TEMPLATES.nad._all(o.name.split(' ')[0]),
           time: formatDate(draft.date), type: 'info', oppId,
         }));
       }
@@ -632,9 +1028,36 @@ export function actionTouchBase(state, oppId) {
     message: msg,
     apply(draft) {
       const o = draft.opportunities.find(x => x.id === oppId);
+      const tbPers = BUYER_PERSONALITIES[o.personalityType];
+      const tbMult = tbPers ? (tbPers.callBonusMultiplier || 1.0) : 1.0;
+      const tbBonus = Math.round(10 * tbMult);
+      const tbFree  = hasSkill(draft, 'callsAreFree');
+      o.temperature = Math.min(100, (o.temperature || 75) + (tbFree ? tbBonus * 2 : tbBonus));
+      (o.temperatureHistory = o.temperatureHistory || []).push({ day: draft.dayNumber, delta: tbFree ? tbBonus * 2 : tbBonus, reason: 'touch-base' });
       o.log.push(`${formatDate(draft.date)}: Touch base call`);
-      draft.actionsRemaining--;
+      if (!tbFree) { draft.actionsRemaining--; draft.actionsUsedToday++; }
+    }
+  };
+}
+
+export function actionSubmitForecast(state, submissions) {
+  if (state.actionsRemaining <= 0) return { success: false, message: 'No actions remaining today.' };
+  return {
+    success: true,
+    apply(draft) {
+      draft.forecastSubmissions   = { ...draft.forecastSubmissions, ...submissions };
+      draft.pipelineReviewSubmitted = true;
+      draft.pipelineReviewIgnoreCount = 0;
+      draft.actionsRemaining = Math.max(0, draft.actionsRemaining - 1);
       draft.actionsUsedToday++;
+      // Update the pipeline review email body with confirmation
+      if (draft.pipelineReviewEmailId) {
+        const email = draft.emails.find(e => e.id === draft.pipelineReviewEmailId);
+        if (email) {
+          email.body += '\n\n—\nForecast submitted. Thanks.\n— CRM System';
+          email.submitted = true;
+        }
+      }
     }
   };
 }
@@ -679,6 +1102,87 @@ export function actionRebookCall(state, oppId, miniGameScore) {
       }
     }
   };
+}
+
+// ─── Market event helpers ─────────────────────────────────────────────────────
+
+function _applyMarketEvent(draft, event, today) {
+  const activeOpps = draft.opportunities.filter(o => ![STAGES.WON, STAGES.LOST, STAGES.SUSPENDED].includes(o.stage));
+  switch (event.effect) {
+    case 'allOppsCloseProbBoost':
+      activeOpps.forEach(o => { o.probBoost = (o.probBoost || 0) + event.magnitude; });
+      draft.activeMarketEffects.push({ type: event.effect, expiryDay: today + (event.duration || 5) });
+      break;
+    case 'randomOppsCloseProbDrop': {
+      const picks = [...activeOpps].sort(() => Math.random() - 0.5).slice(0, event.affectedCount || 2);
+      picks.forEach(o => { o.prob = Math.max(5, o.prob - event.magnitude); });
+      break;
+    }
+    case 'slideWeightShift':
+      draft.activeMarketEffects.push({ type: 'slideWeightShift', tags: event.affectedTags, magnitude: event.magnitude, expiryDay: today + 5 });
+      break;
+    case 'randomOppSuspended': {
+      const suspendable = activeOpps.filter(o => ![STAGES.LIVE_CALL].includes(o.stage));
+      if (suspendable.length > 0) {
+        const target = suspendable[Math.floor(Math.random() * suspendable.length)];
+        target.previousStage = target.stage;
+        target.stage = STAGES.SUSPENDED;
+        target.resumeDay = today + (event.suspendDays || 20);
+        draft.emails.push(makeEmail({
+          from: 'CRM System', subject: `Account suspended — ${target.company}`,
+          body: `${target.name} at ${target.company} is undergoing an acquisition review. Their evaluation has been paused for approximately ${event.suspendDays || 20} days. The deal will reactivate automatically.`,
+          time: formatDate(draft.date), type: 'info', oppId: target.id,
+        }));
+      }
+      break;
+    }
+    case 'bonusOppGenerated': {
+      const bonusOpp = generateOpportunity(draft);
+      bonusOpp.prob = Math.min(95, bonusOpp.prob + (event.probBonus || 0));
+      bonusOpp.value = Math.round(bonusOpp.value * (event.valueBonus || 1.0));
+      draft.opportunities.push(bonusOpp);
+      const bdrRef = getActiveBDR(draft);
+      draft.emails.push(makeEmail({
+        from: bonusOpp.name + ' — ' + bonusOpp.company,
+        subject: `New demo request — ${bonusOpp.company} (referral)`,
+        body: `Hi,\n\nI was referred to you by one of your existing customers. ${bonusOpp.flavourNote}\n\nLooking forward to a demo.\n\nBest,\n${bonusOpp.name}`,
+        time: formatDate(draft.date), type: 'task', oppId: bonusOpp.id, actionType: 'schedule-demo',
+      }));
+      break;
+    }
+    case 'liveCallOppsBoost':
+      activeOpps.filter(o => o.stage === STAGES.LIVE_CALL).forEach(o => { o.probBoost = (o.probBoost || 0) + event.magnitude; });
+      draft.activeMarketEffects.push({ type: event.effect, expiryDay: today + (event.duration || 5) });
+      break;
+    case 'skepticOppsBoost':
+      activeOpps.filter(o => o.personalityType === 'skeptic').forEach(o => { o.prob = Math.min(95, o.prob + event.magnitude); });
+      break;
+    case 'championOppsTemperatureDrop':
+      activeOpps.filter(o => o.personalityType === 'champion').forEach(o => { o.temperature = Math.max(0, (o.temperature || 75) - event.magnitude); });
+      break;
+    case 'operationsBuyerBoost':
+      activeOpps.filter(o => o.buyerProfile === 'operations').forEach(o => { o.prob = Math.min(95, o.prob + event.magnitude); });
+      break;
+    case 'none':
+    default:
+      break;
+  }
+}
+
+function _marketEffectDesc(event) {
+  const descs = {
+    allOppsCloseProbBoost: `+${event.magnitude}% probability boost to all active deals for ${event.duration} days`,
+    randomOppsCloseProbDrop: `${event.affectedCount} random active deals lose ${event.magnitude}% probability`,
+    slideWeightShift: `${(event.affectedTags||[]).join(', ')} slide tags score +${event.magnitude} in demos this week`,
+    randomOppSuspended: `One active deal will be suspended for ${event.suspendDays} days`,
+    bonusOppGenerated: `A bonus inbound opportunity has been added with +${event.probBonus}% probability`,
+    liveCallOppsBoost: `Live call stage deals get +${event.magnitude}% probability for ${event.duration} days`,
+    skepticOppsBoost: `Skeptic personality buyers get +${event.magnitude}% probability`,
+    championOppsTemperatureDrop: `Champion personality buyers lose ${event.magnitude} relationship temperature`,
+    operationsBuyerBoost: `Operations-profile buyers get +${event.magnitude}% probability`,
+    none: 'No mechanical effect this week',
+  };
+  return descs[event.effect] || 'Unknown effect';
 }
 
 // ─── Day advance ──────────────────────────────────────────────────────────────
@@ -735,8 +1239,19 @@ export function advanceDay(state) {
         }
       }
       draft.quarterMonthHits = [false, false, false];
+      // Trigger quarterly review UI
+      draft.pendingQuarterlyReview = true;
     }
   }
+
+  // ── Temperature decay ──
+  draft.opportunities.forEach(o => {
+    if ([STAGES.WON, STAGES.LOST, STAGES.SUSPENDED].includes(o.stage)) return;
+    const pers = BUYER_PERSONALITIES[o.personalityType];
+    const decayRate = pers ? (pers.temperatureDecayRate || 1.0) : 1.0;
+    const dailyDecay = Math.round(2 * decayRate);
+    o.temperature = Math.max(0, (o.temperature || 75) - dailyDecay);
+  });
 
   // ── Update urgency ──
   draft.opportunities.forEach(o => {
@@ -803,6 +1318,19 @@ export function advanceDay(state) {
     }
   });
 
+  // ── Resume suspended opps ──
+  draft.opportunities.forEach(o => {
+    if (o.stage === STAGES.SUSPENDED && o.resumeDay && today >= o.resumeDay) {
+      o.stage = o.previousStage || STAGES.PRE_DEMO;
+      delete o.resumeDay; delete o.previousStage;
+      draft.emails.push(makeEmail({
+        from: 'CRM System', subject: `Deal reactivated — ${o.company}`,
+        body: `${o.name} at ${o.company}'s acquisition review is complete. Their evaluation has resumed.`,
+        time: formatDate(draft.date), type: 'task', oppId: o.id,
+      }));
+    }
+  });
+
   // ── At-risk warnings ──
   draft.opportunities.forEach(o => {
     if (o.stage === STAGES.LIVE_CALL && (o.liveCallBy - today) === 2 && !o._warnedLive) {
@@ -829,6 +1357,80 @@ export function advanceDay(state) {
           body: `${o.name} at ${o.company} will fall out of your futures book in just 5 days.\n\nI'd recommend making your rebook call today.\n\n— ${earlyBdr.name}`,
           time: formatDate(draft.date), type: 'bdr', oppId: o.id }));
       }
+    }
+  });
+
+  // ── Pipeline review ignore check (on Monday) ──
+  const weekNum = Math.floor(today / 5);
+  if (draft.date.day === 1) {
+    const prevWeek = weekNum - 1;
+    if (draft.pipelineReviewSentWeek >= 0 && draft.pipelineReviewSentWeek === prevWeek && !draft.pipelineReviewSubmitted) {
+      draft.pipelineReviewIgnoreCount++;
+      if (draft.pipelineReviewIgnoreCount >= 3) {
+        draft.pendingFired = true;
+      }
+    }
+    draft.pipelineReviewSubmitted = false;
+  }
+
+  // ── Pipeline review email (Monday, 40% chance) ──
+  let pipelineReviewFired = false;
+  if (draft.date.day === 1 && Math.random() < 0.40 && !draft.pendingFired) {
+    pipelineReviewFired = true;
+    const ic = draft.pipelineReviewIgnoreCount;
+    let subject, body;
+    if (ic === 0) {
+      subject = 'Pipeline Review — I Need Your Numbers';
+      body = "Hey, quick one. I need you to submit your close probability estimates for your active pipeline before end of week. Use the form below. This takes two minutes and helps me with forecasting. Don't make me ask twice.\n\n— Dave";
+    } else if (ic === 1) {
+      subject = 'Pipeline Review — You Didn\'t Respond Last Week';
+      body = "I noticed you didn't respond to my pipeline review request last week. I need these numbers. This is not optional. Complete the form below before Friday or we will need to have a different conversation.\n\n— Dave";
+    } else {
+      subject = 'FINAL WARNING — Pipeline Forecast Required';
+      body = "This is your final warning. I have asked you twice for your pipeline forecast. Submit it now using the form below. If I do not receive it by end of this week there will be consequences. I am not joking.\n\n— Dave";
+    }
+    const prEmail = makeEmail({
+      from: 'Manager — Dave H.',
+      subject,
+      body,
+      time: formatDate(draft.date),
+      type: 'pipeline-review',
+    });
+    draft.emails.push(prEmail);
+    draft.pipelineReviewSentWeek = weekNum;
+    draft.pipelineReviewEmailId  = prEmail.id;
+  }
+
+  // ── Meeting interruption (non-Monday, 25% chance) ──
+  draft.pendingMeeting = null;
+  if (draft.date.day !== 1 && !pipelineReviewFired && Math.random() < 0.25) {
+    draft.pendingMeeting = MEETING_EVENTS[Math.floor(Math.random() * MEETING_EVENTS.length)];
+  }
+
+  // ── Market event (Monday) ──
+  if (draft.date.day === 1 && !draft.pendingFired) {
+    const event = MARKET_EVENTS[Math.floor(Math.random() * MARKET_EVENTS.length)];
+    _applyMarketEvent(draft, event, today);
+    const hasTransparency = hasSkill(draft, 'marketEventTransparency');
+    let mktBody = `Hey,\n\n${event.daveText}`;
+    if (hasTransparency) mktBody += `\n\n[Effect: ${_marketEffectDesc(event)}]`;
+    mktBody += '\n\nDave';
+    const weekInGame = (draft.date.quarter - 1) * 12 + (draft.date.month - 1) * 4 + draft.date.week;
+    draft.emails.push(makeEmail({
+      from: 'Manager — Dave H.',
+      subject: `Q${draft.date.quarter} · M${draft.date.month} · Week ${weekInGame} — Market Update`,
+      body: mktBody,
+      time: formatDate(draft.date), type: 'manager',
+    }));
+  }
+
+  // ── Clear expired market effects ──
+  draft.activeMarketEffects = (draft.activeMarketEffects || []).filter(e => !e.expiryDay || today < e.expiryDay);
+  // Recompute weeklySlideModifiers from active effects
+  draft.weeklySlideModifiers = {};
+  draft.activeMarketEffects.forEach(e => {
+    if (e.type === 'slideWeightShift' && e.tags) {
+      e.tags.forEach(tag => { draft.weeklySlideModifiers[tag] = (draft.weeklySlideModifiers[tag] || 0) + e.magnitude; });
     }
   });
 
@@ -905,6 +1507,11 @@ export function advanceDay(state) {
       draft.pendingBDRReminder = true;
     }
 
+    // Monday bonus action (Time Lord skill)
+    if (hasSkill(draft, 'mondayBonusAction')) {
+      draft.actionsRemaining++;
+    }
+
     // Auto-book demos (Jordan: top 1, Sam: top 2)
     if (bdrActs.includes('autoBookDemo')) {
       const limit    = bdrActs.includes('autoBookTop2') ? 2 : 1;
@@ -968,6 +1575,14 @@ export function advanceDay(state) {
     }
   }
 
+  // ── Leaderboard weekly drift ──
+  if (draft.leaderboard) {
+    draft.leaderboard.forEach(c => {
+      const drift = (Math.random() - 0.45) * 5;
+      c.attainment = Math.max(0, Math.round(c.attainment + drift));
+    });
+  }
+
   // ── Occasional spam (~every 3 days) ──
   if (Math.random() < 0.33) {
     const unsent = SPAM_POOL.filter(s => !draft.spamSent.includes(s.subject));
@@ -1002,7 +1617,7 @@ export function clearState() {
 function deepCopy(obj) { return JSON.parse(JSON.stringify(obj)); }
 
 export function getActiveOpps(state) {
-  return state.opportunities.filter(o => ![STAGES.WON, STAGES.LOST].includes(o.stage));
+  return state.opportunities.filter(o => ![STAGES.WON, STAGES.LOST, STAGES.SUSPENDED].includes(o.stage));
 }
 
 export function getUrgentOpps(state) {

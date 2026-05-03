@@ -1,312 +1,248 @@
 /**
- * dialogues.js — Dialogue sequences for the call mini-game (Mini-game 3)
- * Each sequence has 4 rounds. Each round has 3 options, exactly one correct.
- * Buyer tone is embedded in the statement text; players must read to identify it.
+ * dialogues.js — Dialogue sequences for the call mini-game.
+ * Each sequence has 4 rounds. Each round has 3 options — one correct.
+ * Each option has a reaction string (buyer's internal thought after the player speaks).
+ * partialCredit: true marks the "closer but still wrong" option per round.
  */
 
-// ─── Close call dialogues (live opportunity, trying to close) ─────────────────
+// ─── Close call dialogues ─────────────────────────────────────────────────────
 
 export const CLOSE_DIALOGUES = [
   {
     id: 'close-1',
-    buyerOpener: "We've done our research. I need to know if this is actually going to work for a team like ours before I put it in front of my board.",
+    name: 'The Hesitant CFO',
     rounds: [
       {
-        buyerStatement: "Look, we've had vendors promise the world before and it didn't pan out. I just need specifics — how long does onboarding realistically take for a 200-person team?",
+        buyerStatement: "Look, I'll be honest with you — the pricing is higher than we budgeted for.",
         options: [
-          { style: 'Consultative', text: "That's a fair concern. For a team your size, most customers are fully onboarded in 4–6 weeks. Can I walk you through what that looks like step-by-step?", correct: true },
-          { style: 'Assertive',   text: "Four to six weeks. We've done hundreds of rollouts this size. You have my word it'll be smooth.", correct: false },
-          { style: 'Empathetic',  text: "I completely understand — getting let down by a vendor is really frustrating. I'm sorry you've had that experience.", correct: false },
-        ]
+          { text: "I completely understand. Let me see what I can do on the price.", correct: false, partialCredit: true, reaction: "Hmm. They seem too eager to discount. That's a red flag." },
+          { text: "That's fair feedback. Can you help me understand what the budget ceiling looks like?", correct: true,  reaction: "Good question. That's someone who listens." },
+          { text: "Our pricing is actually very competitive compared to alternatives.", correct: false, reaction: "I didn't ask about alternatives. This rep isn't hearing me." },
+        ],
       },
       {
-        buyerStatement: "What I really need is references. Not case studies — actual customers I can call who've been through this.",
+        buyerStatement: "We've been burned before by software that looked great in demos but fell apart in implementation.",
         options: [
-          { style: 'Consultative', text: "Absolutely. What industry or use case would be most relevant for you? I'll connect you with two or three customers who match your profile.", correct: true },
-          { style: 'Assertive',   text: "I can get you five references today. What's your email?", correct: false },
-          { style: 'Empathetic',  text: "Of course — you want to make sure you're making the right call. I'd want that too.", correct: false },
-        ]
+          { text: "I hear that. What would give you confidence that our implementation is different?", correct: true,  reaction: "Finally someone who gets it. This is the right question." },
+          { text: "Our implementation team is world class. We have a 98% success rate.", correct: false, partialCredit: true, reaction: "Stats don't reassure me. I've heard this before." },
+          { text: "We could offer a pilot programme to reduce your risk.", correct: false, reaction: "Jumping to solutions before understanding the problem. Classic." },
+        ],
       },
       {
-        buyerStatement: "The price is higher than the other two options we're looking at. You'd need to help me make the case internally.",
+        buyerStatement: "I need to bring this to the board before we can move forward. That could take six weeks.",
         options: [
-          { style: 'Consultative', text: "Let's build that case together. What metrics does your board care about most — cost reduction, time savings, or risk mitigation?", correct: true },
-          { style: 'Assertive',   text: "We're not the cheapest option, but we're consistently the highest-ROI. Once you run the numbers, it's clear.", correct: false },
-          { style: 'Empathetic',  text: "I hear you — budget conversations are always tough. What kind of pushback are you expecting?", correct: false },
-        ]
+          { text: "Six weeks is a long time — is there any way to fast-track this?", correct: false, reaction: "They're pushing me. This feels like pressure." },
+          { text: "Understood. What would the board need to see to feel confident approving this?", correct: true,  reaction: "Now we're talking. They want to help me, not rush me." },
+          { text: "We have other clients interested in this pricing. I can't hold it for six weeks.", correct: false, partialCredit: true, reaction: "Was that a threat? I'm not signing anything under pressure." },
+        ],
       },
       {
-        buyerStatement: "I want to move forward, but I need a signed pilot agreement — not a full contract — so I can test without committing the whole budget.",
+        buyerStatement: "If the numbers work out I think we could be a good fit. But I'm not ready to commit today.",
         options: [
-          { style: 'Consultative', text: "A pilot makes a lot of sense given what you've shared. I can structure a 30-day paid pilot scoped around your top two use cases. Want me to put that together?", correct: true },
-          { style: 'Assertive',   text: "A pilot adds delay and complexity. Let me push for a short-term contract instead — same flexibility, faster start.", correct: false },
-          { style: 'Empathetic',  text: "That's totally reasonable. I'll do whatever you need to make you feel comfortable.", correct: false },
-        ]
+          { text: "What would need to happen for you to feel ready to commit?", correct: true,  reaction: "Perfect. They're asking the right question instead of pushing." },
+          { text: "I understand. I'll follow up next week.", correct: false, partialCredit: true, reaction: "Passive. No next step defined. This will go cold." },
+          { text: "What if we offered a 10% discount to close this week?", correct: false, reaction: "Discounting already? This rep has no confidence in the value." },
+        ],
       },
-    ]
+    ],
   },
 
   {
     id: 'close-2',
-    buyerOpener: "I like what I saw in the demo. The timing might just be the problem — we're mid-cycle on a few other initiatives.",
+    name: 'The Enthusiastic Champion',
     rounds: [
       {
-        buyerStatement: "We're stretched thin right now. Honestly, the team doesn't have capacity to onboard anything new this quarter.",
+        buyerStatement: "Honestly I love the product. My team is really excited. I just need to get sign-off from my VP.",
         options: [
-          { style: 'Consultative', text: "That's worth unpacking. Would a phased rollout — starting with just your core team over the next 3 weeks — reduce that capacity concern?", correct: true },
-          { style: 'Assertive',   text: "Our implementation team handles 90% of the heavy lifting. Your team's involvement is minimal.", correct: false },
-          { style: 'Empathetic',  text: "I completely get it — when your team is stretched, adding anything new feels impossible.", correct: false },
-        ]
+          { text: "That's great to hear! Let me know when you have the sign-off.", correct: false, partialCredit: true, reaction: "They're just waiting around. That's not helping me." },
+          { text: "Fantastic. What does your VP care most about — is it cost, risk, or speed to value?", correct: true,  reaction: "Smart. They're helping me build the internal case." },
+          { text: "Would it help if I sent you a one-pager you could share with your VP?", correct: false, reaction: "A one-pager? I need a conversation, not a PDF." },
+        ],
       },
       {
-        buyerStatement: "We're probably looking at next quarter. I'd rather wait until we've closed out what we're working on.",
+        buyerStatement: "My VP always asks about what happens if it doesn't work out. He's very risk averse.",
         options: [
-          { style: 'Consultative', text: "Let me ask — if we could start on a read-only basis now so your team gets familiar, would a full rollout next quarter work better for you?", correct: true },
-          { style: 'Assertive',   text: "Waiting a quarter means another quarter of the same problems. What's the cost of doing nothing?", correct: false },
-          { style: 'Empathetic',  text: "I understand — there's never a perfect time. I just want to make sure you don't feel rushed.", correct: false },
-        ]
+          { text: "We have contractual SLAs and a full money-back guarantee period.", correct: false, partialCredit: true, reaction: "Rattling off contract terms isn't what I need right now." },
+          { text: "Would it help to have a direct conversation between your VP and our customer success lead?", correct: true,  reaction: "Yes. Exactly. Peer to peer. That would help a lot." },
+          { text: "Risk averse VPs are actually our best customers once they see the data.", correct: false, reaction: "That feels patronising. My VP isn't a type." },
+        ],
       },
       {
-        buyerStatement: "What kind of pricing flexibility do you have if we lock in now but start next quarter?",
+        buyerStatement: "He also wants to know what the exit strategy is if we need to move off the platform in two years.",
         options: [
-          { style: 'Consultative', text: "Good question. I can typically offer current pricing locked in with a delayed start date — let me confirm the specifics with my team and come back to you today.", correct: true },
-          { style: 'Assertive',   text: "Sign today and I'll hold pricing. After this week I can't guarantee the rates.", correct: false },
-          { style: 'Empathetic',  text: "I appreciate you being upfront about timing. I'll do my best to make it work for you.", correct: false },
-        ]
+          { text: "Our platform is designed for long-term partnerships. Churn is very low.", correct: false, reaction: "That doesn't answer the question at all." },
+          { text: "Honestly that's a fair question. Let me walk you through our data export and transition support.", correct: true,  reaction: "Straight answer. I respect that." },
+          { text: "Most customers who ask that question end up staying for five or more years.", correct: false, partialCredit: true, reaction: "Deflecting with statistics. Not what I asked." },
+        ],
       },
       {
-        buyerStatement: "Alright. What does the path to signing actually look like from here?",
+        buyerStatement: "If you can get me something in writing by Thursday I think I can get it on the agenda for Friday's exec meeting.",
         options: [
-          { style: 'Consultative', text: "Simple: I send a pilot agreement today, you review by end of week, we align on start date, procurement does their check. Three steps. Want me to map it out in writing?", correct: true },
-          { style: 'Assertive',   text: "I'll send the contract this afternoon. Get your legal team on it and we can close by Friday.", correct: false },
-          { style: 'Empathetic',  text: "I just want to make sure you're fully comfortable before we do anything. Take your time.", correct: false },
-        ]
+          { text: "Thursday works. I'll have a full proposal with references and an exec summary to you by noon.", correct: true,  reaction: "Specific, committed, and realistic. This is someone I can work with." },
+          { text: "I'll do my best to get something to you by Thursday.", correct: false, partialCredit: true, reaction: "Best effort isn't a commitment. I needed a yes." },
+          { text: "Let me check with my team and get back to you on timing.", correct: false, reaction: "They're going to check with their team? On a Thursday deadline? We're done." },
+        ],
       },
-    ]
+    ],
   },
 
   {
     id: 'close-3',
-    buyerOpener: "We're definitely serious about this. I have a few final questions before I can recommend sign-off to the CEO.",
+    name: 'The Skeptical Evaluator',
     rounds: [
       {
-        buyerStatement: "What happens to our data if we decide to leave? I need to know the exit path before we sign anything.",
+        buyerStatement: "We're talking to three other vendors. I want to be upfront about that.",
         options: [
-          { style: 'Consultative', text: "Fair question — it's the right thing to ask. You get a full data export in standard CSV/JSON formats at any time. We can add a contractual SLA on export turnaround if that helps.", correct: true },
-          { style: 'Assertive',   text: "Your data is yours. You can export it any time. This isn't something to worry about.", correct: false },
-          { style: 'Empathetic',  text: "I think it's really smart that you're thinking about this. A lot of buyers forget to ask.", correct: false },
-        ]
+          { text: "I appreciate the transparency. What criteria are you using to evaluate us?", correct: true,  reaction: "Good. They want to understand the scorecard rather than just pitch." },
+          { text: "We're confident we'll come out ahead in any fair comparison.", correct: false, partialCredit: true, reaction: "Confident and empty. I've heard this from every vendor." },
+          { text: "Who else are you evaluating? I'd love to address any comparisons directly.", correct: false, reaction: "Why do they need to know who I'm talking to? That feels off." },
+        ],
       },
       {
-        buyerStatement: "My CEO is going to ask about the security posture. Can you tell me what certifications you hold?",
+        buyerStatement: "One of the other vendors is significantly cheaper. Like 40% cheaper.",
         options: [
-          { style: 'Consultative', text: "We're SOC 2 Type II certified and GDPR compliant. I can send the full security whitepaper and compliance documentation — is there a specific certification your CEO needs to see?", correct: true },
-          { style: 'Assertive',   text: "SOC 2 Type II, GDPR, ISO 27001 in progress. We're as secure as anyone in the market.", correct: false },
-          { style: 'Empathetic',  text: "That's a totally legitimate concern — security is non-negotiable. I'll do whatever it takes to reassure them.", correct: false },
-        ]
+          { text: "Price isn't everything. Our total cost of ownership is much lower over three years.", correct: false, partialCredit: true, reaction: "They went straight to defensive mode. Classic." },
+          { text: "That's worth understanding. Is price the primary factor in your decision?", correct: true,  reaction: "Good. They're not panicking. They're getting clarity." },
+          { text: "Can you share who it is? I might be able to explain the difference.", correct: false, reaction: "I'm not here to do competitive intelligence for them." },
+        ],
       },
       {
-        buyerStatement: "We'll need multi-year pricing. Is there any movement on the annual rate for a 3-year commitment?",
+        buyerStatement: "I want to see a reference from a company in our exact industry before I move forward.",
         options: [
-          { style: 'Consultative', text: "Yes — multi-year deals typically come with a 10–15% discount on year two and three. Let me pull the exact numbers for your contract size and send a comparison tonight.", correct: true },
-          { style: 'Assertive',   text: "Commit to 3 years and I'll get you 15% off. That's the best I can do.", correct: false },
-          { style: 'Empathetic',  text: "I understand you're trying to get the best deal for your company. I'll try my hardest to get you something.", correct: false },
-        ]
+          { text: "Absolutely. I can connect you with two customers in your sector this week.", correct: true,  reaction: "Fast and specific. That's what I was hoping for." },
+          { text: "We have hundreds of customers across all industries. Happy to share case studies.", correct: false, partialCredit: true, reaction: "Case studies aren't references. I said I want to talk to someone." },
+          { text: "Our NPS score is 72 which is top quartile in the market.", correct: false, reaction: "NPS means nothing to me. I want a phone call." },
+        ],
       },
       {
-        buyerStatement: "Assuming the security docs and pricing check out — what's your expected close timeline from your side?",
+        buyerStatement: "Assuming the reference checks out — what does the contract process look like?",
         options: [
-          { style: 'Consultative', text: "From my side: I can have docs and pricing to you by tomorrow morning. If your CEO has what they need by mid-week, we can typically execute within 48 hours. Does that timeline fit your planning?", correct: true },
-          { style: 'Assertive',   text: "We can close this week if you move fast on the review.", correct: false },
-          { style: 'Empathetic',  text: "There's no pressure at all — take whatever time you need.", correct: false },
-        ]
+          { text: "Standard MSA, DPA, and order form. Legal review usually takes one to two weeks on our end.", correct: true,  reaction: "Clear and honest about timing. That's helpful." },
+          { text: "Our contracts are very straightforward. Usually signed within a few days.", correct: false, partialCredit: true, reaction: "That sounds unrealistic. Now I'm suspicious." },
+          { text: "Let me introduce you to our legal team and they can walk you through it.", correct: false, reaction: "I don't want to meet another person. I wanted a simple answer." },
+        ],
       },
-    ]
+    ],
   },
 ];
 
-// ─── Rebook call dialogues (future opportunity, trying to re-engage) ──────────
+// ─── Rebook call dialogues ────────────────────────────────────────────────────
 
 export const REBOOK_DIALOGUES = [
   {
     id: 'rebook-1',
-    buyerOpener: "Oh — yes, we spoke a few months back. Things got a bit hectic on our end. Where did we leave it?",
+    name: 'The Stalled Decision',
     rounds: [
       {
-        buyerStatement: "Right, the timing just wasn't great. We were going through a reorganisation and everything kind of froze.",
+        buyerStatement: "Oh hi. Honestly things got really busy internally and this kind of fell off our radar.",
         options: [
-          { style: 'Empathetic',   text: "That sounds like it was a challenging period. Is things have settled, or are you still navigating changes?", correct: true },
-          { style: 'Consultative', text: "Understood. A lot changes in a restructure — has the original problem we discussed shifted at all?", correct: false },
-          { style: 'Assertive',   text: "Makes sense. Now that things have stabilised, the urgency around solving this hasn't gone away.", correct: false },
-        ]
+          { text: "I completely understand. These things happen. Shall we find a new time?", correct: false, partialCredit: true, reaction: "Too eager. No curiosity about what actually happened." },
+          { text: "That happens. What was it that got in the way — was it budget, timing, or something else?", correct: true,  reaction: "Good question. They actually want to understand, not just rebook." },
+          { text: "I've been trying to reach you for a few weeks. I wanted to make sure you hadn't forgotten us.", correct: false, reaction: "That comes across as a guilt trip. Not a great restart." },
+        ],
       },
       {
-        buyerStatement: "Honestly, the problem we talked about hasn't gone away. It's actually gotten worse. But I'm not sure I have the internal buy-in to move on it right now.",
+        buyerStatement: "We had a reorg and my manager who was championing this has moved to a different department.",
         options: [
-          { style: 'Consultative', text: "Let's focus on that buy-in question. Who else in your org needs to be part of this conversation, and what do they need to see?", correct: true },
-          { style: 'Assertive',   text: "If the problem has gotten worse, that's exactly the argument you need to make the case internally. I can help you put it together.", correct: false },
-          { style: 'Empathetic',  text: "I'm sorry to hear it's gotten worse — that's really frustrating when you know something needs to change.", correct: false },
-        ]
+          { text: "I'm sorry to hear that. Who has taken over their responsibilities?", correct: true,  reaction: "Exactly the right response. Empathy and forward motion." },
+          { text: "Reorgs are tough. Hopefully things settle down soon.", correct: false, partialCredit: true, reaction: "That's a dead-end comment. Nothing useful came from that." },
+          { text: "Is there any chance your old manager can still influence the decision?", correct: false, reaction: "They're chasing a ghost. My old manager has no power here." },
+        ],
       },
       {
-        buyerStatement: "What would a re-engagement look like? I don't want to go through the whole sales process again.",
+        buyerStatement: "I'm not sure the new stakeholder has any context on what we were evaluating.",
         options: [
-          { style: 'Consultative', text: "Fair enough. I'd suggest a focused 30-minute session — no pitch, just map your current situation to where we left off and see what's changed. Does that work?", correct: true },
-          { style: 'Assertive',   text: "We can skip straight to a commercial proposal if that's easier. I'll have something to you by tomorrow.", correct: false },
-          { style: 'Empathetic',  text: "I completely understand — going through the whole process again is exhausting. I'll keep it as painless as possible.", correct: false },
-        ]
+          { text: "Would it make sense to start fresh with a new demo for them — I can keep it short and focused.", correct: true,  reaction: "Yes. Start fresh. That's the right read." },
+          { text: "I could send over the materials from the original evaluation for them to review.", correct: false, partialCredit: true, reaction: "Nobody reads materials sent cold. That's a dead end." },
+          { text: "Could you brief them on what we discussed and then set up a call?", correct: false, reaction: "I'm not doing their job for them. That's a no." },
+        ],
       },
       {
-        buyerStatement: "Okay, I'm open to it. But I need you to know — if the pricing has changed significantly, it's a non-starter.",
+        buyerStatement: "If we do this again I need it to be worth their time. They're very senior.",
         options: [
-          { style: 'Consultative', text: "Appreciate the transparency. Pricing hasn't moved for your segment, but let me confirm the exact figure from our last proposal and verify nothing's changed before we book time.", correct: true },
-          { style: 'Assertive',   text: "Pricing is the same. Book the call and let's not let that be the obstacle.", correct: false },
-          { style: 'Empathetic',  text: "That's completely fair — price sensitivity is real and I respect that.", correct: false },
-        ]
+          { text: "Understood. Before we book anything — what are the top two things they care most about?", correct: true,  reaction: "Perfect. Research before scheduling. That's a pro move." },
+          { text: "I'll put together a tailored agenda focused on executive-level outcomes.", correct: false, partialCredit: true, reaction: "They don't know what I care about yet. How can they tailor anything?" },
+          { text: "We have a short executive briefing format that works really well for senior stakeholders.", correct: false, reaction: "A format pitch before understanding the person. That's backwards." },
+        ],
       },
-    ]
+    ],
   },
 
   {
     id: 'rebook-2',
-    buyerOpener: "I remember you. We had a good demo but we had to put everything on hold. Budget freeze.",
+    name: 'The Budget Freeze',
     rounds: [
       {
-        buyerStatement: "The freeze has lifted but the budget is smaller than it was. I'm working with less than I had before.",
+        buyerStatement: "We had a budget freeze at the end of the quarter. Everything non-essential got paused.",
         options: [
-          { style: 'Consultative', text: "Let's figure out what fits. What's the use case you'd want to solve first if you had to prioritise one? That might help us find a scope that works within what you have.", correct: true },
-          { style: 'Empathetic',  text: "I'm sorry to hear that — working with a reduced budget is really tough, especially when you know what you need.", correct: false },
-          { style: 'Assertive',   text: "We can work with smaller budgets. Let me show you a stripped-down version that still solves the core problem.", correct: false },
-        ]
+          { text: "That's really common right now. Is the freeze still in effect or is there a review coming up?", correct: true,  reaction: "Good. They want to understand the timeline, not just commiserate." },
+          { text: "I'm sorry to hear that. Please keep us in mind when things open up.", correct: false, reaction: "That's a graceful way to lose the deal. No urgency, no follow-through." },
+          { text: "We do have some flexible payment options that might help with budget constraints.", correct: false, partialCredit: true, reaction: "I didn't ask for a workaround. I said there was a freeze." },
+        ],
       },
       {
-        buyerStatement: "The team that was going to use this has changed as well. Half of them are new hires.",
+        buyerStatement: "The business case was there but leadership wants to wait until Q3 to revisit big spend decisions.",
         options: [
-          { style: 'Consultative', text: "That actually might be an advantage — onboarding new team members onto a platform from day one is often easier than migrating an established team. How soon are these hires starting?", correct: true },
-          { style: 'Empathetic',  text: "Team transitions are always disruptive — I understand why this makes the decision harder.", correct: false },
-          { style: 'Assertive',   text: "New hires are easy to train. That shouldn't be a barrier.", correct: false },
-        ]
+          { text: "That makes sense. Would it be useful to have something ready to go the moment Q3 opens?", correct: true,  reaction: "Yes. Get in the queue early. That's smart." },
+          { text: "Is there any discretionary budget you could use to get started with a smaller pilot?", correct: false, reaction: "I just told them leadership made the call. A pilot isn't in my hands." },
+          { text: "What would need to change between now and Q3 for this to become a priority?", correct: false, partialCredit: true, reaction: "Nothing needs to change. The timeline was set above my head." },
+        ],
       },
       {
-        buyerStatement: "I need to be honest — there's another vendor we've been talking to who came in while you were off the radar.",
+        buyerStatement: "I'd hate to go through the whole evaluation process again from scratch.",
         options: [
-          { style: 'Consultative', text: "Good to know. What's driving the conversation with them — is there something specific they're offering that you're not sure we can match?", correct: true },
-          { style: 'Assertive',   text: "I'd ask them about X and Y — those are usually where the cracks show up in a side-by-side comparison.", correct: false },
-          { style: 'Empathetic',  text: "I completely understand — you had to keep evaluating options while we were out of the picture.", correct: false },
-        ]
+          { text: "You won't have to. Everything we built together is still here — we just need a short refresh call.", correct: true,  reaction: "That's reassuring. Low friction restart. I like that." },
+          { text: "I completely understand. We can pick up right where we left off.", correct: false, partialCredit: true, reaction: "Vague. What does 'pick up where we left off' actually mean?" },
+          { text: "The good news is our product has improved since we last spoke.", correct: false, reaction: "I don't want a product update. I want to know it'll be easy." },
+        ],
       },
       {
-        buyerStatement: "If you can show me something this week, I'll put you back into the running.",
+        buyerStatement: "If I go back to my team with this in Q3 I need to show something has changed to justify reopening it.",
         options: [
-          { style: 'Consultative', text: "I can do a focused session Thursday or Friday — 45 minutes, tailored to the use cases that matter most to you now. What's your availability?", correct: true },
-          { style: 'Assertive',   text: "Thursday at 2pm. I'll send a calendar invite right now.", correct: false },
-          { style: 'Empathetic',  text: "Thank you for giving us another shot — that really means a lot. I'll make sure it's worth your time.", correct: false },
-        ]
+          { text: "What would be most compelling — new customer results, pricing options, or an updated ROI model?", correct: true,  reaction: "Options. They're giving me something to choose from. That's useful." },
+          { text: "We've had several new customers join since we spoke who I think you'd find very relevant.", correct: false, partialCredit: true, reaction: "New customers aren't my problem to solve. I need internal ammo." },
+          { text: "Let me put together a summary of what's changed since we last spoke.", correct: false, reaction: "A summary I didn't ask for. Another PDF nobody will read." },
+        ],
       },
-    ]
+    ],
   },
 
   {
     id: 'rebook-3',
-    buyerOpener: "Hi — yes, I know we've been hard to reach. Things have been moving at a million miles an hour here.",
+    name: 'The Competitive Loss Follow-up',
     rounds: [
       {
-        buyerStatement: "We've actually been dealing with a system failure on our end that's made everything take a back seat.",
+        buyerStatement: "We actually went with another vendor. I thought someone would have updated you.",
         options: [
-          { style: 'Empathetic',   text: "That sounds really stressful — system failures always create a cascade of other problems. Is the immediate situation under control now?", correct: true },
-          { style: 'Consultative', text: "I'd be curious whether the problem you were trying to solve with us is connected to the failure in any way.", correct: false },
-          { style: 'Assertive',   text: "A lot of our customers came to us after exactly that kind of event. Once things settle, that urgency is a good lever.", correct: false },
-        ]
+          { text: "I appreciate you telling me. Can I ask what ended up being the deciding factor?", correct: true,  reaction: "Graceful and curious. I respect that. I'll actually answer." },
+          { text: "Oh I didn't know that. I'm sorry to hear it — I really thought we had a good fit.", correct: false, partialCredit: true, reaction: "The sympathy feels off. And now I feel awkward." },
+          { text: "Was it a price decision or something else?", correct: false, reaction: "Leading with price assumes they're shallow. That's not right." },
+        ],
       },
       {
-        buyerStatement: "That incident has actually made the case for what we were discussing much stronger internally. People are now open to it who weren't before.",
+        buyerStatement: "Honestly it came down to implementation support. They had a dedicated team on-site for the first 90 days.",
         options: [
-          { style: 'Consultative', text: "That's a meaningful shift. What would be the most valuable thing to show the new stakeholders — a live demo, a business case document, or both?", correct: true },
-          { style: 'Assertive',   text: "Great. Strike while the iron is hot — let's get something on the calendar this week before the momentum fades.", correct: false },
-          { style: 'Empathetic',  text: "I'm glad something positive came out of a difficult situation for your team.", correct: false },
-        ]
+          { text: "That's really helpful to know. Is that something that would have changed the outcome if we had offered it?", correct: true,  reaction: "Good. They're not being defensive. They want to learn." },
+          { text: "We actually have on-site implementation options. I wish that had come up earlier.", correct: false, partialCredit: true, reaction: "Now they tell me. A little late and a little defensive." },
+          { text: "A lot of companies find that remote implementation works just as well in practice.", correct: false, reaction: "I literally just told them why we chose the other vendor. Stop arguing." },
+        ],
       },
       {
-        buyerStatement: "My main concern now is implementation risk. We can't afford another disruption.",
+        buyerStatement: "We're locked in for 12 months. But I'll be honest — I'm not 100% sure it was the right call.",
         options: [
-          { style: 'Consultative', text: "Implementation risk is exactly the right thing to focus on. Would it help to talk through how we've handled similar rollouts — specifically how we minimise downtime and what a parallel-run approach looks like?", correct: true },
-          { style: 'Empathetic',  text: "After what you've been through, that concern makes complete sense. I want to help you feel safe about this decision.", correct: false },
-          { style: 'Assertive',   text: "Our implementation track record is strong. I'll send you our uptime and rollout success stats.", correct: false },
-        ]
+          { text: "I appreciate you saying that. Would it be worth staying in touch so you have an option when the contract is up?", correct: true,  reaction: "Yes. Low pressure. They're playing a long game. I respect that." },
+          { text: "If things don't work out with them you know where to find us.", correct: false, reaction: "That sounds like they're hoping for failure. Bad taste." },
+          { text: "What makes you feel like it might not have been the right call?", correct: false, partialCredit: true, reaction: "Too probing. I'm not ready to dissect my own decision with a vendor." },
+        ],
       },
       {
-        buyerStatement: "What I need is a clear implementation plan before I'll agree to anything. Can you provide that up front?",
+        buyerStatement: "I wouldn't mind staying in touch but I don't want to be bombarded with emails.",
         options: [
-          { style: 'Consultative', text: "Absolutely. I can provide a draft implementation plan scoped to your environment — I'll need about 30 minutes with your technical lead to make it accurate. Can we set that up this week?", correct: true },
-          { style: 'Assertive',   text: "I'll have a plan in your inbox by tomorrow morning. That's my commitment.", correct: false },
-          { style: 'Empathetic',  text: "Of course — you've been through enough uncertainty. I'll make sure you have everything you need before you commit.", correct: false },
-        ]
+          { text: "Understood. How about I reach out once at the six-month mark — just a check-in, no pitch?", correct: true,  reaction: "Perfect. Specific, respectful, low commitment. I can agree to that." },
+          { text: "Of course. I'll just add you to our newsletter so you stay in the loop on product updates.", correct: false, reaction: "A newsletter is exactly the bombardment I just asked to avoid." },
+          { text: "I'll keep it minimal. Maybe just a quick note every month or so?", correct: false, partialCredit: true, reaction: "Monthly is not minimal. That's not listening." },
+        ],
       },
-    ]
+    ],
   },
 ];
-
-// ─── Buyer brief templates for the slide picker (mini-game 1) ─────────────────
-
-export const BUYER_PROFILES = {
-  finance: {
-    label:        'CFO / Finance Buyer',
-    description:  'Focused on measurable return, cost justification, and budget risk. Gets impatient with technical detail.',
-    painPoints:   ['Lack of visibility into ROI on software spend', 'Too long to see value from new platforms'],
-    priorities:   ['Clear payback period', 'Reducing total cost of ownership'],
-    dontCare:     ['Technical architecture', 'Product roadmap'],
-    high:         [0, 1, 2],    // ROI Calculator, TCO, Time to Value
-    low:          [7, 6],       // Technical Architecture, Product Roadmap
-  },
-  technical: {
-    label:        'CTO / Technical Buyer',
-    description:  'Evaluates integration depth, security posture, and technical scalability. Mistrustful of sales claims without evidence.',
-    painPoints:   ['Integration fragility with existing stack', 'Security and compliance gaps'],
-    priorities:   ['Proven architecture', 'Enterprise-grade security'],
-    dontCare:     ['ROI slides', 'Market positioning'],
-    high:         [7, 5, 4],    // Technical Architecture, Security, Integrations
-    low:          [0, 11],      // ROI Calculator, Market Position
-  },
-  operations: {
-    label:        'Operations / COO Buyer',
-    description:  'Cares about practical rollout, ease of adoption, and post-sale support. Skeptical of complex implementations.',
-    painPoints:   ['Manual processes slowing the team down', 'Previous rollouts that failed to stick'],
-    priorities:   ['Ease of implementation', 'Strong customer success model'],
-    dontCare:     ['Long-term roadmap', 'Deep technical specs'],
-    high:         [3, 9, 2],    // Ease of Implementation, Customer Success, Time to Value
-    low:          [6, 7],       // Product Roadmap, Technical Architecture
-  },
-  procurement: {
-    label:        'Procurement / Vendor Management Buyer',
-    description:  'Runs a structured process. Needs evidence, references, and verifiable compliance. Resistant to pressure.',
-    painPoints:   ['Difficulty comparing vendors on equivalent criteria', 'Risk of signing with wrong partner'],
-    priorities:   ['Validated customer references', 'Full cost transparency'],
-    dontCare:     ['Feature demos', 'Market share claims'],
-    high:         [1, 5, 8],    // TCO, Security, Customer Stories
-    low:          [10, 11],     // Feature Walkthrough, Market Position
-  },
-};
-
-// ─── Slide definitions for mini-game 1 ───────────────────────────────────────
-
-export const SLIDES = [
-  { title: 'ROI Calculator',         icon: '📊', desc: 'Quantify returns based on customer-specific inputs' },
-  { title: 'Total Cost of Ownership',icon: '💰', desc: 'Full cost comparison over 3 years including hidden costs' },
-  { title: 'Time to Value',          icon: '⚡', desc: 'How quickly customers see measurable results' },
-  { title: 'Ease of Implementation', icon: '🔧', desc: 'What onboarding looks like: timeline, effort, support' },
-  { title: 'Integrations Overview',  icon: '🔗', desc: 'Pre-built connectors and API capabilities' },
-  { title: 'Security & Compliance',  icon: '🔒', desc: 'Certifications, data handling, and compliance posture' },
-  { title: 'Product Roadmap',        icon: '🗺️', desc: 'Where the product is going over the next 12–18 months' },
-  { title: 'Technical Architecture', icon: '🏗️', desc: 'Infrastructure, scalability, and deployment options' },
-  { title: 'Customer Stories',       icon: '💬', desc: 'Case studies and references from similar customers' },
-  { title: 'Customer Success Model', icon: '🤝', desc: 'How we support you post-sale' },
-  { title: 'Feature Walkthrough',    icon: '🖥️', desc: 'Detailed product feature overview' },
-  { title: 'Market Position',        icon: '🏆', desc: 'How we compare to the competition' },
-];
-
-// Buyer reactions for slide scoring
-export const SLIDE_REACTIONS = {
-  high:    ['Exactly what I needed to see.', 'This is very relevant to us.', 'Strong — this addresses my main concern.', 'Great inclusion.'],
-  neutral: ['Useful context.', 'Good to have.', 'Fair enough.', 'I can work with that.'],
-  low:     ['Not really relevant to me.', "I didn't need this.", 'We can skip over this.', 'This doesn\'t move the needle for me.'],
-};

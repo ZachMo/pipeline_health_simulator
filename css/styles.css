@@ -223,7 +223,7 @@ html, body {
   flex-direction: column;
 }
 .inbox-list {
-  height: 200px;
+  height: 290px;
   overflow-y: auto;
   background: #ffffff;
   flex-shrink: 0;
@@ -245,7 +245,7 @@ html, body {
   border-bottom: 1px solid #c0c0c0;
   cursor: pointer;
   align-items: flex-start;
-  min-height: 40px;
+  min-height: 58px;
   font-family: Arial, sans-serif;
 }
 .inbox-list-item:hover    { background: #000080; color: #ffffff; }
@@ -393,6 +393,29 @@ html, body {
   max-width: 90vw;
   max-height: 90vh;
   width: 760px;
+}
+.modal-box.modal-minigame {
+  max-width: 90vw;
+  max-height: 90vh;
+  width: 90vw;
+}
+.modal-box.modal-fired {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  background: #000080;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
 }
 .modal-header {
   display: flex;
@@ -825,4 +848,158 @@ html, body {
 @media (max-width: 768px) {
   .id-card { display: none; }
   .app-header { padding: 4px 8px; }
+  .inbox-list { max-height: 290px; height: auto; }
+}
+
+/* ── Meeting interruption overlay ───────────────────────────────────────────── */
+.meeting-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 500;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 40px;
+}
+.meeting-card {
+  background: #d4d0c8;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  box-shadow: 4px 4px 0 #000000;
+  width: 100%;
+  max-width: 480px;
+}
+.meeting-card-header {
+  background: #000080;
+  color: #ffffff;
+  font-size: 11px;
+  font-family: Arial, 'MS Sans Serif', sans-serif;
+  font-weight: bold;
+  padding: 3px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.meeting-card-header::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.55) 1px, transparent 1px) 0 0 / 4px 4px;
+}
+.meeting-card-body {
+  padding: 12px 14px;
+  background: #d4d0c8;
+}
+.meeting-dismiss-btn {
+  min-height: 32px;
+  font-size: 12px;
+  width: 100%;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  background: #d4d0c8;
+  cursor: pointer;
+  font-family: Arial, 'MS Sans Serif', sans-serif;
+  margin-top: 10px;
+  border-radius: 0;
+  color: #000000;
+}
+.meeting-dismiss-btn:hover  { background: #c8c4bc; }
+.meeting-dismiss-btn:active { border-color: #808080 #ffffff #ffffff #808080; }
+
+@media (max-width: 768px) {
+  .meeting-card  { max-width: 100%; }
+  .meeting-dismiss-btn { min-height: 48px; }
+  .meeting-overlay { padding-top: 0; align-items: flex-end; }
+}
+
+/* ── Proposal builder timer bar ─────────────────────────────────────────────── */
+.pb-timer-wrap {
+  background: #404040;
+  height: 18px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.pb-timer-bar { height: 100%; background: #EF9F27; transition: width .1s linear; }
+
+/* ── Confidence meter (Deal or No Deal) ─────────────────────────────────────── */
+.conf-meter-wrap {
+  background: #404040;
+  height: 16px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  overflow: hidden;
+}
+.conf-meter-bar { height: 100%; background: #00aa00; transition: width .3s, background .3s; }
+
+/* Win banner */
+.win-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #1D9E75;
+  color: #ffffff;
+  text-align: center;
+  padding: 12px 16px;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 20000;
+  animation: winBannerSlide 0.3s ease-out;
+  letter-spacing: 0.03em;
+}
+
+@keyframes winBannerSlide {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Win flash on kanban */
+@keyframes winFlash {
+  0%   { background: rgba(29, 158, 117, 0); }
+  40%  { background: rgba(29, 158, 117, 0.3); }
+  100% { background: rgba(29, 158, 117, 0); }
+}
+.win-flash {
+  animation: winFlash 0.8s ease-out;
+}
+
+/* Skill card picker */
+.skill-card:hover { border-color: #378ADD !important; background: #f0f8ff !important; }
+
+/* Leaderboard */
+.leaderboard-panel {
+  margin-top: 10px;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  background: var(--bg2);
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 10px;
+  font-family: 'Courier New', monospace;
+}
+.leaderboard-panel:hover { background: var(--bg3); }
+
+/* Suspended opp column */
+.kanban-suspended {
+  opacity: 0.55;
+  filter: grayscale(60%);
+}
+
+/* Win streak badge */
+.streak-badge {
+  display: inline-block;
+  background: #E24B4A;
+  color: #fff;
+  font-size: 10px;
+  font-family: Arial, sans-serif;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
 }
