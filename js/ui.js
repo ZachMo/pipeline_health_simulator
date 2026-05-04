@@ -6,25 +6,11 @@
 import {
   STAGES, formatDate, formatDateShort, formatQuarterMonth, dayNumberToDate,
   getSeasonInfo, getActiveOpps, getPipelineSummary,
-  ACTIONS_PER_DAY, getNextQuarterQuota, BDR_ROSTER,
+  ACTIONS_PER_DAY, getNextQuarterQuota, BDR_ROSTER, TITLE_PROGRESSION,
+  CLOSE_PERSONALITY_TYPES,
 } from './engine.js';
 
 const PERSONALITY_ICONS = { analytical: '📊', relationshipBuilder: '🤝', impatient: '⚡', skeptic: '🔍', champion: '🏆' };
-
-const POSITIONS = [
-  'Jr Sales Rep',
-  'Jr Senior Sales Rep',
-  'Jr Mid-Market Sales Rep',
-  'Mid Market Sales Rep',
-  'Sr Mid Market Sales Rep',
-  'Sr Sales Rep',
-  'Jr Enterprise Sales Rep',
-  'Enterprise Sales Rep',
-  'Sr Enterprise Sales Rep',
-  'Executive Enterprise Sales Rep',
-  'Lead Sales Rep of Global Operations',
-  'Sr Executive Sales Rep of Global Ops',
-];
 
 const STAGE_SHORT = {
   [STAGES.PRE_DEMO]:          'Sch. Demo',
@@ -49,40 +35,29 @@ const STAGE_LABELS = {
 };
 
 const KANBAN_COLUMNS = [
-  { key: STAGES.PRE_DEMO,          label: 'Schedule Demo'  },
-  { key: STAGES.DEMO_SCHEDULED,    label: 'Demo Booked'    },
-  { key: STAGES.PROPOSAL,          label: 'Build Proposal' },
-  { key: STAGES.PRICING_SCHEDULED, label: 'Pricing Booked' },
-  { key: STAGES.LIVE_CALL,         label: 'Call to Close'  },
-  { key: STAGES.FUTURE,            label: 'Futures'        },
+  { key: 'awaiting-demo',           label: 'Awaiting Demo',   stages: [STAGES.PRE_DEMO, STAGES.DEMO_SCHEDULED] },
+  { key: STAGES.DEMO_HOSTED,        label: 'Demo Done',       stages: [STAGES.DEMO_HOSTED] },
+  { key: STAGES.PROPOSAL,           label: 'Pricing Prep',    stages: [STAGES.PROPOSAL] },
+  { key: STAGES.PRICING_SCHEDULED,  label: 'Pricing Booked',  stages: [STAGES.PRICING_SCHEDULED] },
+  { key: STAGES.LIVE_CALL,          label: 'Closing',         stages: [STAGES.LIVE_CALL] },
+  { key: STAGES.FUTURE,             label: 'Futures',         stages: [STAGES.FUTURE] },
 ];
-
-const STAGE_COLORS = {
-  [STAGES.PRE_DEMO]:          { bg: '#FAEEDA', text: '#633806', border: '#EF9F27' },
-  [STAGES.DEMO_SCHEDULED]:    { bg: '#EEEDFE', text: '#3C3489', border: '#7F77DD' },
-  [STAGES.DEMO_HOSTED]:       { bg: '#EEEDFE', text: '#3C3489', border: '#7F77DD' },
-  [STAGES.PROPOSAL]:          { bg: '#E6F1FB', text: '#0C447C', border: '#378ADD' },
-  [STAGES.PRICING_SCHEDULED]: { bg: '#E1F5EE', text: '#085041', border: '#1D9E75' },
-  [STAGES.LIVE_CALL]:         { bg: '#FCEBEB', text: '#791F1F', border: '#E24B4A' },
-  [STAGES.FUTURE]:            { bg: '#F1EFE8', text: '#444441', border: '#888780' },
-  [STAGES.WON]:               { bg: '#EAF3DE', text: '#27500A', border: '#639922' },
-  [STAGES.LOST]:              { bg: '#F1EFE8', text: '#5F5E5A', border: '#B4B2A9' },
-};
 
 const URGENCY_COLORS = { red: '#E24B4A', amber: '#EF9F27', green: '#1D9E75' };
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
 export function renderHeader(state) {
-  const season  = getSeasonInfo(state.date.gameMonth);
-  const pct     = Math.min(100, Math.round((state.monthRevenue / state.quota) * 100));
-  const weekNum = Math.floor(state.dayNumber / 5) + 1;
+  const season       = getSeasonInfo(state.date.gameMonth);
+  const curMonRev    = state.currentMonthRevenue !== undefined ? state.currentMonthRevenue : (state.monthRevenue || 0);
+  const curQuota     = state.monthlyQuota || state.quota || 80000;
+  const pct          = Math.min(100, Math.round((curMonRev / curQuota) * 100));
 
   document.getElementById('header-date').textContent = formatDate(state.date);
   document.getElementById('header-season').textContent =
     formatQuarterMonth(state.date) + (season.isSlow ? ' · Slow season' : '');
   document.getElementById('quota-pct').textContent =
-    `$${Math.round(state.monthRevenue / 1000)}k / $${Math.round(state.quota / 1000)}k`;
+    `$${Math.round(curMonRev / 1000)}k / $${Math.round(curQuota / 1000)}k`;
   const bar = document.getElementById('quota-bar');
   bar.style.width      = pct + '%';
   bar.style.background = pct >= 80 ? '#00aa00' : pct >= 50 ? '#008080' : '#ff0000';
@@ -150,6 +125,17 @@ export function renderEmails(state, onEmailSelect) {
   badge.style.background = unread > 0 ? '#ff0000' : '#d4d0c8';
   badge.style.color      = unread > 0 ? '#ffffff' : '#808080';
 
+  // Mark all as read button — inject into panel header if not present
+  const panelHeader = document.querySelector('#panel-inbox .panel-header');
+  if (panelHeader && !panelHeader.querySelector('.mark-all-read-btn')) {
+    const markBtn = document.createElement('button');
+    markBtn.className = 'btn btn-sm mark-all-read-btn';
+    markBtn.textContent = 'Mark all read';
+    markBtn.style.cssText = 'font-size:10px;padding:1px 5px;border:1px solid #808080;cursor:pointer;background:var(--bg);color:#ffffff;margin-left:auto;';
+    markBtn.onclick = () => window._markAllRead && window._markAllRead();
+    panelHeader.appendChild(markBtn);
+  }
+
   const sorted = [...state.emails].reverse();
   const list   = document.getElementById('inbox-list');
 
@@ -164,16 +150,25 @@ export function renderEmails(state, onEmailSelect) {
     }
   }
 
+  // Set global handler before rendering so onclick="window._onEmailSelect(n)" is always valid
+  window._onEmailSelect = function(id) {
+    _selectedEmailId = id;
+    onEmailSelect(id);
+  };
+
+  list.onclick = null; // clear any previous delegated listener
+
   list.innerHTML = sorted.map(e => {
     const isSelected = e.id === _selectedEmailId;
-    const newLabel   = e.read ? '' : `<span style="color:#00aa00;font-weight:bold;font-size:10px;font-family:Arial,sans-serif;flex-shrink:0;margin-top:2px;white-space:nowrap">[NEW]</span>`;
+    const newLabel   = e.read ? '' : `<span style="color:#00aa00;font-weight:bold;font-size:10px;font-family:Arial,sans-serif;flex-shrink:0;margin-top:2px;white-space:nowrap;pointer-events:none">[NEW]</span>`;
     const preview    = e.body.replace(/\n/g, ' ').substring(0, 55);
     return `<div
       class="inbox-list-item${isSelected ? ' selected' : ''}"
       onclick="window._onEmailSelect(${e.id})"
+      style="cursor:pointer"
     >
       ${newLabel}
-      <div style="flex:1;min-width:0">
+      <div style="flex:1;min-width:0;pointer-events:none">
         <div style="display:flex;justify-content:space-between;gap:4px;align-items:baseline">
           <span style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${e.from}</span>
           <span style="font-size:10px;color:var(--text3);white-space:nowrap;flex-shrink:0">${e.time}</span>
@@ -183,11 +178,6 @@ export function renderEmails(state, onEmailSelect) {
       </div>
     </div>`;
   }).join('');
-
-  window._onEmailSelect = (id) => {
-    _selectedEmailId = id;
-    onEmailSelect(id);
-  };
 }
 
 export function renderEmailBody(state, emailId, onEmailAction) {
@@ -206,8 +196,17 @@ export function renderEmailBody(state, emailId, onEmailAction) {
     const opp = state.opportunities.find(o => o.id === e.oppId);
     if (opp && opp.stage === STAGES.PRE_DEMO) {
       actionBtn = `<div style="margin-top:16px">
-        <button class="btn btn-primary" onclick="window._onEmailAction('schedule-demo',${e.oppId})">
+        <button class="btn btn-primary" data-action="schedule-demo" data-opp-id="${e.oppId}" onclick="window._emailAction(this.dataset.action, parseInt(this.dataset.oppId))">
           Schedule demo
+        </button>
+      </div>`;
+    }
+  } else if (e.actionType === 'schedule-pricing' && e.oppId) {
+    const opp = state.opportunities.find(o => o.id === e.oppId);
+    if (opp && opp.stage === STAGES.DEMO_HOSTED) {
+      actionBtn = `<div style="margin-top:16px">
+        <button class="btn btn-primary" data-action="schedule-pricing" data-opp-id="${e.oppId}" onclick="window._emailAction(this.dataset.action, parseInt(this.dataset.oppId))">
+          Schedule pricing meeting
         </button>
       </div>`;
     }
@@ -261,6 +260,22 @@ export function renderPhone(state, onCallClick, onContactCallClick, activeTab, e
   const allActive  = getActiveOpps(state).slice().sort((a, b) => b.id - a.id);
   const callables  = allActive.filter(o => o.stage === STAGES.LIVE_CALL || o.stage === STAGES.FUTURE);
   const tab        = activeTab || 'contacts';
+
+  const avatarSrc  = (state.avatarIndex === 1) ? 'player_avatar2.png' : 'player_avatar1.png';
+  const empName    = state.playerDisplayName || 'EMPLOYEE';
+  const empId      = state.employeeId || '000000';
+  const position   = TITLE_PROGRESSION[Math.min(state.titleProgress || 0, 11)];
+
+  const profileHtml = `<div class="phone-profile">
+    <img src="${avatarSrc}" class="phone-profile-avatar" alt="Employee photo" onerror="this.style.display='none'">
+    <div class="phone-profile-info">
+      <div class="phone-profile-name">${empName}</div>
+      <div class="phone-profile-title">${position}</div>
+      <div class="phone-profile-id">EMP-${empId}</div>
+    </div>
+    <div class="phone-profile-dept">SALES DEPT</div>
+    <div class="phone-profile-barcode"></div>
+  </div>`;
 
   const tabsHtml = `<div class="phone-tabs">
     <button class="phone-tab${tab === 'contacts' ? ' active' : ''}" onclick="window._setPhoneTab('contacts')">Contacts (${allActive.length})</button>
@@ -341,7 +356,13 @@ export function renderPhone(state, onCallClick, onContactCallClick, activeTab, e
         }).join('');
   }
 
-  container.innerHTML = tabsHtml + `<div class="phone-list-scroll">${listHtml}</div>`;
+  container.innerHTML = `<div class="phone-layout">
+    ${profileHtml}
+    <div class="phone-right">
+      ${tabsHtml}
+      <div class="phone-list-scroll">${listHtml}</div>
+    </div>
+  </div>`;
   window._onCallClick    = onCallClick;
   window._onContactCall  = onContactCallClick;
 }
@@ -349,57 +370,80 @@ export function renderPhone(state, onCallClick, onContactCallClick, activeTab, e
 // ─── Pipeline — Kanban only ───────────────────────────────────────────────────
 
 export function renderPipeline(state, onKanbanCardClick) {
-  const bdrId       = state.activeBDR || 'none';
-  const bdrEntry    = BDR_ROSTER.find(b => b.id === bdrId) || BDR_ROSTER[0];
+  const bdrId        = state.activeBDR || 'none';
+  const bdrEntry     = BDR_ROSTER.find(b => b.id === bdrId) || BDR_ROSTER[0];
   const hasRiskFlags = bdrEntry.autoActions.includes('riskFlags');
 
   const el = document.getElementById('pipe-kanban');
-  const colsHtml = KANBAN_COLUMNS.map(col => {
-      // Demo Booked column shows both DEMO_SCHEDULED and DEMO_HOSTED
-      const opps = getActiveOpps(state).filter(o =>
-        o.stage === col.key ||
-        (col.key === STAGES.DEMO_SCHEDULED && o.stage === STAGES.DEMO_HOSTED)
-      );
-      const sc = STAGE_COLORS[col.key];
-      const cards = opps.map(o => {
-        const dot     = o.urgency === 'red' ? '#E24B4A' : o.urgency === 'amber' ? '#EF9F27' : null;
-        const showVal = o.demoHostedDay !== null;
-        const hint    = showVal
-          ? `$${(o.value/1000).toFixed(0)}k · ${o.prob}%`
-          : o.flavourNote
-            ? o.flavourNote.substring(0, 48) + '…'
-            : '';
-        const riskWarn = (hasRiskFlags && o.urgency === 'red')
-          ? `<span style="position:absolute;top:4px;right:${dot ? '18px' : '6px'};font-size:11px;line-height:1" title="At risk">⚠</span>`
-          : '';
-        // Temperature thermometer
-        const temp = o.temperature || 75;
-        const tempColor = temp >= 76 ? '#1D9E75' : temp >= 51 ? '#EF9F27' : temp >= 26 ? '#378ADD' : '#808080';
-        const tempLabel = temp >= 76 ? 'Hot' : temp >= 51 ? 'Warm' : temp >= 26 ? 'Cooling' : 'Cold';
-        const tempIcon = `<span title="Relationship: ${tempLabel}" style="cursor:help;color:${tempColor};font-size:11px">🌡️</span>`;
-        const persIcon = o.personalityRevealed && PERSONALITY_ICONS[o.personalityType]
-          ? `<span title="${o.personalityType}" style="font-size:11px">${PERSONALITY_ICONS[o.personalityType]}</span>`
-          : '';
-        return `<div
-          onclick="window._onKanbanClick(${o.id})"
-          style="background:#fffef0;border:1px solid #808080;border-radius:0;padding:5px 7px;margin-bottom:4px;cursor:pointer;position:relative"
-        >
-          <div style="font-size:11px;font-weight:bold;color:#000000;margin-bottom:1px;font-family:Arial,sans-serif">${o.company}</div>
-          <div style="font-size:10px;color:#404040;line-height:1.4;font-family:'Courier New',monospace">${hint}</div>
-          <div style="margin-top:2px">${tempIcon}${persIcon}</div>
-          ${riskWarn}
-          ${dot ? `<div style="width:7px;height:7px;border-radius:50%;background:${dot};position:absolute;top:6px;right:6px"></div>` : ''}
-        </div>`;
-      }).join('');
+  const allActive = getActiveOpps(state);
 
-      return `<div class="kanban-col">
-        <div class="kanban-col-header">${col.label}</div>
-        ${cards || `<div style="font-size:10px;color:var(--text3);font-style:italic">—</div>`}
+  const colsHtml = KANBAN_COLUMNS.map(col => {
+    const opps = allActive.filter(o => col.stages.includes(o.stage));
+
+    const cards = opps.map(o => {
+      const dot         = o.urgency === 'red' ? '#E24B4A' : o.urgency === 'amber' ? '#EF9F27' : null;
+      const demoRevealed = o.demoHostedDay !== null;
+
+      // Temperature icon
+      const temp      = o.temperature || 75;
+      const tempColor = temp >= 76 ? '#1D9E75' : temp >= 51 ? '#EF9F27' : temp >= 26 ? '#378ADD' : '#808080';
+      const tempLabel = temp >= 76 ? 'Hot' : temp >= 51 ? 'Warm' : temp >= 26 ? 'Cooling' : 'Cold';
+      const tempIcon  = `<span title="Relationship: ${tempLabel}" style="cursor:help;color:${tempColor};font-size:11px">🌡️</span>`;
+
+      // Personality icon only if revealed
+      const persIcon = o.personalityRevealed && PERSONALITY_ICONS[o.personalityType]
+        ? `<span title="${o.personalityType}" style="font-size:11px">${PERSONALITY_ICONS[o.personalityType]}</span>`
+        : '';
+
+      // Close personality badge — shown on LIVE_CALL cards when revealed
+      const closeCP    = CLOSE_PERSONALITY_TYPES[o.closePersonalityType] || {};
+      const closeCPBadge = (o.closePersonalityRevealed && o.stage === STAGES.LIVE_CALL)
+        ? `<span title="Close style: ${closeCP.label || o.closePersonalityType} — ${closeCP.hint || ''}" style="display:inline-flex;align-items:center;gap:2px;font-size:10px;padding:1px 5px;border:1px solid #808080;background:#e8e8ff;font-family:Arial,sans-serif;cursor:help">${closeCP.icon || '?'} ${closeCP.label || o.closePersonalityType}</span>`
+        : '';
+
+      // Risk warning
+      const riskWarn = (hasRiskFlags && o.urgency === 'red')
+        ? `<span style="position:absolute;top:4px;right:${dot ? '18px' : '6px'};font-size:11px;line-height:1" title="At risk">⚠</span>`
+        : '';
+
+      let infoHtml;
+      if (demoRevealed) {
+        // After demo: show buyer name, deal value, close probability
+        infoHtml = `
+          <div style="font-size:10px;color:#404040;font-family:'Courier New',monospace">${o.name}</div>
+          <div style="font-size:10px;color:#404040;font-family:'Courier New',monospace">$${(o.value/1000).toFixed(0)}k · ${o.prob}%</div>`;
+        // FUTURE: show days since closed and call eligibility
+        if (o.stage === STAGES.FUTURE && o.futureClosedDay != null) {
+          const daysSince   = state.dayNumber - o.futureClosedDay;
+          const eligible    = daysSince >= 10;
+          const eligColor   = eligible ? '#1D9E75' : '#EF9F27';
+          const eligText    = eligible ? 'Call eligible' : `Call eligible in ${10 - daysSince}d`;
+          infoHtml += `<div style="font-size:10px;font-family:'Courier New',monospace;color:#808080">Closed: ${daysSince}d ago</div>`;
+          infoHtml += `<div style="font-size:10px;font-family:'Courier New',monospace;color:${eligColor}">${eligText}</div>`;
+        }
+      } else {
+        // Before demo: company name only + icons
+        infoHtml = `<div style="font-size:10px;color:#808080;font-family:'Courier New',monospace;font-style:italic">Demo pending</div>`;
+      }
+
+      return `<div style="background:#fffef0;border:1px solid #808080;padding:5px 7px;margin-bottom:4px;position:relative">
+        <div style="font-size:11px;font-weight:bold;color:#000000;margin-bottom:1px;font-family:Arial,sans-serif">${o.company}</div>
+        ${infoHtml}
+        <div style="margin-top:2px">${tempIcon}${persIcon}</div>
+        ${closeCPBadge ? `<div style="margin-top:3px">${closeCPBadge}</div>` : ''}
+        ${riskWarn}
+        ${dot ? `<div style="width:7px;height:7px;border-radius:50%;background:${dot};position:absolute;top:6px;right:6px"></div>` : ''}
       </div>`;
     }).join('');
 
+    return `<div class="kanban-col">
+      <div class="kanban-col-header">${col.label}</div>
+      ${cards || `<div style="font-size:10px;color:var(--text3);font-style:italic">—</div>`}
+    </div>`;
+  }).join('');
+
   // ── SUSPENDED column ──
-  const suspendedOpps = state.opportunities.filter(o => o.stage === STAGES.SUSPENDED);
+  const suspendedOpps  = state.opportunities.filter(o => o.stage === STAGES.SUSPENDED);
   const suspendedCards = suspendedOpps.map(o => {
     const resumeIn = o.resumeDay ? Math.max(0, o.resumeDay - state.dayNumber) : '?';
     return `<div style="background:#e8e8e8;border:1px solid #808080;padding:5px 7px;margin-bottom:4px;opacity:0.8">
@@ -421,24 +465,26 @@ export function renderPipeline(state, onKanbanCardClick) {
 // ─── Stats footer ─────────────────────────────────────────────────────────────
 
 export function renderStats(state) {
-  const summary   = getPipelineSummary(state);
-  const pct       = Math.min(100, Math.round((state.monthRevenue / state.quota) * 100));
-  const nextQ     = getNextQuarterQuota(state);
-  const nextQText = nextQ > state.quota
+  const summary      = getPipelineSummary(state);
+  const curMonRev    = state.currentMonthRevenue !== undefined ? state.currentMonthRevenue : (state.monthRevenue || 0);
+  const curQuota     = state.monthlyQuota || state.quota || 80000;
+  const pct          = Math.min(100, Math.round((curMonRev / curQuota) * 100));
+  const nextQ        = getNextQuarterQuota(state);
+  const nextQText    = nextQ > state.quota
     ? `$${Math.round(nextQ/1000)}k ↑`
     : `$${Math.round(nextQ/1000)}k`;
 
-  _setStat('stat-won',    `$${Math.round(state.monthRevenue/1000)}k`, '#00aa00');
+  _setStat('stat-won',    `$${Math.round(curMonRev/1000)}k`, '#00aa00');
   _setStat('stat-active', summary.total);
   _setStat('stat-urgent', summary.urgent, summary.urgent > 0 ? '#ff0000' : null);
   _setStat('stat-pct',    pct + '%');
-  _setStat('stat-quota',  `$${Math.round(state.quota/1000)}k`);
+  _setStat('stat-quota',  `$${Math.round(curQuota/1000)}k`);
   _setStat('stat-nextq',  nextQText, nextQ > state.quota ? '#00aa00' : null);
 
   // Leaderboard panel
   const lbEl = document.getElementById('stat-leaderboard');
   if (lbEl && state.leaderboard) {
-    const playerAtt = Math.round((state.won / state.quota) * 100);
+    const playerAtt = Math.round((curMonRev / curQuota) * 100);
     const allEntries = [
       { name: 'You', attainment: playerAtt, isPlayer: true },
       ...state.leaderboard
@@ -468,18 +514,16 @@ export function renderIdCard(state) {
   const card = document.getElementById('id-card');
   if (!card) return;
 
-  const isFemale   = state.avatarIndex === 1;
-  const avatarSrc  = isFemale ? 'player_avatar2.png' : 'player_avatar1.png';
-  const name       = isFemale ? 'SALLY, MARY' : 'DANIEL, JOHN';
-  const empId      = state.employeeId || '000000';
-  const qIdx       = Math.min((state.date.quarter || 1) - 1, POSITIONS.length - 1);
-  const position   = POSITIONS[qIdx];
+  const isFemale  = state.avatarIndex === 1;
+  const avatarSrc = isFemale ? 'player_avatar2.png' : 'player_avatar1.png';
+  const name      = state.playerDisplayName || (isFemale ? 'EMPLOYEE' : 'EMPLOYEE');
+  const empId     = state.employeeId || '000000';
+  const position  = TITLE_PROGRESSION[Math.min(state.titleProgress || 0, 11)];
 
   card.innerHTML = `
     <div class="id-card-stripe">&#9632; PIPELINE HEALTH SIM &#9632;</div>
     <div class="id-card-body">
       <img src="${avatarSrc}" class="id-card-avatar" alt="Employee photo">
-      <button class="id-card-switch" onclick="window.switchAvatar()">Switch</button>
       <div class="id-card-divider"></div>
       <div class="id-card-name">${name}</div>
       <div class="id-card-fields">
@@ -493,6 +537,45 @@ export function renderIdCard(state) {
 
 // ─── Modal helpers ────────────────────────────────────────────────────────────
 
+function _makeDraggable(box) {
+  const header = box.querySelector('.modal-header');
+  if (!header) return;
+
+  let offsetX = 0, offsetY = 0;
+  let startX, startY;
+  let isDragging = false;
+
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    const newX = offsetX + (e.clientX - startX);
+    const newY = offsetY + (e.clientY - startY);
+    box.style.transform = `translate(${newX}px, ${newY}px)`;
+  };
+
+  const onMouseUp = (e) => {
+    if (!isDragging) return;
+    offsetX += e.clientX - startX;
+    offsetY += e.clientY - startY;
+    isDragging = false;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  };
+
+  const onMouseDown = (e) => {
+    if (e.target.tagName === 'BUTTON') return;
+    isDragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    e.preventDefault();
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  if (header._dragHandler) header.removeEventListener('mousedown', header._dragHandler);
+  header._dragHandler = onMouseDown;
+  header.addEventListener('mousedown', onMouseDown);
+}
+
 export function showModal(title, bodyHtml, buttons = [], mini = false) {
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').innerHTML    = bodyHtml;
@@ -501,9 +584,13 @@ export function showModal(title, bodyHtml, buttons = [], mini = false) {
   ).join('');
   const box = document.getElementById('modal-box');
   box.className = mini ? 'modal-box modal-mini' : 'modal-box';
+  box.style.transform = '';
   document.getElementById('modal-wrap').style.display = 'flex';
+  _makeDraggable(box);
 }
 
 export function closeModal() {
   document.getElementById('modal-wrap').style.display = 'none';
+  const box = document.getElementById('modal-box');
+  if (box) box.style.transform = '';
 }

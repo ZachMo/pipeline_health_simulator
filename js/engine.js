@@ -4,12 +4,27 @@
  * No DOM references. Pure logic.
  */
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
+
+export const TITLE_PROGRESSION = [
+  'Jr Sales Rep',
+  'Jr Senior Sales Rep',
+  'Jr Mid-Market Sales Rep',
+  'Mid Market Sales Rep',
+  'Sr Mid Market Sales Rep',
+  'Sr Sales Rep',
+  'Jr Enterprise Sales Rep',
+  'Enterprise Sales Rep',
+  'Sr Enterprise Sales Rep',
+  'Executive Enterprise Sales Rep',
+  'Lead Sales Rep of Global Operations',
+  'Senior Executive Sales Rep of Global Operations',
+];
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 export const ACTIONS_PER_DAY         = 5;
-export const DEMO_SCHEDULE_DEADLINE  = 1;   // days to act on scheduling after booking arrives
+export const DEMO_SCHEDULE_DEADLINE  = 2;   // days to act on scheduling after booking arrives (3 days including arrival day)
 export const DEMO_SCHEDULE_WINDOW    = 5;   // business days ahead player may pick for demo
 export const PRICING_WINDOW          = 5;   // business days to book pricing after demo
 export const LIVE_CALL_DEADLINE      = 7;   // days after pricing to call or lose
@@ -354,11 +369,11 @@ function makeEmail(overrides) {
 }
 
 const SPAM_POOL = [
-  { from: 'newsletter@salesbuzz.io', subject: '7 closing techniques top reps swear by', body: 'Hi there,\n\nAre your reps struggling to hit quota? Download our 47-page closing guide.\n\n[SPAM — you can safely ignore this]' },
-  { from: 'events@salesworld.com',   subject: 'You\'re invited: SalesWorld Summit', body: 'Join 10,000 sales professionals at SalesWorld Summit! Early bird tickets just $899.\n\n[SPAM — ignore]' },
-  { from: 'noreply@linkedinmail.com', subject: 'Marcus Brennan viewed your profile', body: 'Your profile was viewed 3 times this week. Upgrade to Premium to see who!\n\n[SPAM — ignore]' },
-  { from: 'coaching@closemoredeals.biz', subject: 'Your pipeline is leaking revenue', body: 'Studies show 73% of reps lose deals due to poor follow-up. Our AI tool fixes that.\n\n[SPAM — ignore]' },
-  { from: 'hr@company-internal.com', subject: 'Action required: update your emergency contacts', body: 'Please log in to the HR portal and verify your emergency contact information.\n\n[LOW PRIORITY]' },
+  { from: 'newsletter@salesbuzz.io', subject: '7 closing techniques top reps swear by', body: 'Hi there,\n\nAre your reps struggling to hit quota? Download our 47-page closing guide. Includes frameworks used by top earners across SaaS, manufacturing, and logistics.' },
+  { from: 'events@salesworld.com',   subject: 'You\'re invited: SalesWorld Summit', body: 'Join 10,000 sales professionals at SalesWorld Summit! Early bird tickets just $899. Three days of keynotes, workshops, and networking.' },
+  { from: 'noreply@linkedinmail.com', subject: 'Marcus Brennan viewed your profile', body: 'Your profile was viewed 3 times this week. Upgrade to Premium to see who viewed your profile and reach out directly.' },
+  { from: 'coaching@closemoredeals.biz', subject: 'Your pipeline is leaking revenue', body: 'Studies show 73% of reps lose deals due to poor follow-up. Our AI follow-up tool identifies at-risk deals before they go cold. Try it free for 30 days.' },
+  { from: 'hr@company-internal.com', subject: 'Action required: update your emergency contacts', body: 'Please log in to the HR portal and verify your emergency contact information before the end of this month. This is required for all staff.' },
 ];
 
 // ── DATA SECTION ──────────────────────────────────────────────────────────────
@@ -448,6 +463,17 @@ function pickPersonality() {
   for (const p of PERSONALITY_WEIGHTS) { r -= p.weight; if (r <= 0) return p.type; }
   return 'skeptic';
 }
+
+// ─── Close personality types (communication style for close call dialogue) ────
+
+export const CLOSE_PERSONALITY_TYPES = {
+  analytical:      { label: 'Analytical',      icon: '🔬', hint: 'Responds to data, structured questions, and logical reasoning.' },
+  direct:          { label: 'Direct',          icon: '🎯', hint: 'Wants brevity and concrete next steps. Skip the preamble.' },
+  confrontational: { label: 'Confrontational', icon: '🔥', hint: 'Pushes back hard. Respond with confidence — don\'t back down.' },
+  passive:         { label: 'Passive',         icon: '🌿', hint: 'Needs reassurance. Low-pressure approaches win here.' },
+};
+
+const CLOSE_PERSONALITY_KEYS = Object.keys(CLOSE_PERSONALITY_TYPES);
 
 export const MARKET_EVENTS = [
   { id: 'award_win',          subject: 'Good news — Widget Wonders takes home the industry award',
@@ -574,6 +600,7 @@ export function generateOpportunity(gameState) {
     liveCallBy:          null,
     liveCalledDay:       null,
     futureExpiry:        null,
+    futureClosedDay:     null,
 
     bdrNotes: buildBdrNotes(value, flavour.buyerProfile),
 
@@ -587,6 +614,10 @@ export function generateOpportunity(gameState) {
     temperatureHistory:  [],
     probBoost:           0,
     proposalMultiplier:  1.0,
+
+    // Sprint 5 — close call communication style
+    closePersonalityType:     CLOSE_PERSONALITY_KEYS[Math.floor(Math.random() * CLOSE_PERSONALITY_KEYS.length)],
+    closePersonalityRevealed: false,
   };
 
   // Apply personality modifiers
@@ -602,12 +633,7 @@ export function generateOpportunity(gameState) {
 
 function _buildLeaderboard() {
   const names = ['Marcus Webb','Diana Park','Kevin Okafor','Elena Johansson','Patrick Ali','Fatima Brennan','George Schmidt','Yuki Martin'];
-  return names.map(name => ({
-    name,
-    attainment: 40 + Math.floor(Math.random() * 90), // 40–130%
-    dealsWon:   Math.floor(Math.random() * 8),
-    revenue:    Math.floor(Math.random() * 400000) + 50000,
-  }));
+  return names.map(name => ({ name, attainment: 0, dealsWon: 0, revenue: 0 }));
 }
 
 // ─── Initial state ────────────────────────────────────────────────────────────
@@ -618,7 +644,6 @@ export function createInitialState() {
     date:               dayNumberToDate(0),  // Q1·M1·W1·D1
 
     actionsRemaining:   ACTIONS_PER_DAY,
-    actionsUsedToday:   0,
 
     quota:              QUOTA_START,
     won:                0,                  // cumulative all-time
@@ -630,17 +655,12 @@ export function createInitialState() {
     calendarEvents:     [],
     emails:             [],
     spamSent:           [],
-    log:                [],
-
-    gameOver:           false,
-    gameOverReason:     null,
 
     employeeId:         String(Math.floor(100000 + Math.random() * 900000)),
     avatarIndex:        0,
 
     activeBDR:          null,
     availableBDRs:      ['none'],
-    bdrUnlockLog:       [],
     q1AboveQuota:       false,
     q2AboveQuota:       false,
     pendingBDRReminder: false,
@@ -667,6 +687,24 @@ export function createInitialState() {
     pendingQuarterlyReview:  false,
     leaderboard:             _buildLeaderboard(),
     pendingWinBanner:        null,
+
+    // Sprint 5 — performance tracking
+    performanceHistory:      [],
+    currentMonthRevenue:     0,
+    currentQuarterRevenue:   0,
+    currentYearRevenue:      0,
+    monthlyQuota:            80000,
+    projectedYearlyQuota:    Array(12).fill(80000),
+    territoryLevel:          0,
+    titleProgress:           0,
+    birthdayFiredThisMonth:  false,
+    gameCompleted:           false,
+    dealsWonThisMonth:       0,
+    dealsLostThisMonth:      0,
+    dealsNADThisMonth:       0,
+    consecutiveDaysNoDemoBooking: 0,
+    waterCoolerFired:        false,
+    pendingWaterCooler:      false,
   };
 }
 
@@ -674,6 +712,24 @@ export function createInitialState() {
 
 export function hasSkill(state, skillId) {
   return Array.isArray(state.playerSkills) && state.playerSkills.includes(skillId);
+}
+
+// ─── getCurrentMonthRecord helper ────────────────────────────────────────────
+
+export function getCurrentMonthRecord(state) {
+  return {
+    quarter: state.date.quarter,
+    month: state.date.gameMonth,
+    monthInQuarter: state.date.month,
+    quota: state.monthlyQuota || state.quota || 80000,
+    revenue: state.currentMonthRevenue || 0,
+    attainment: Math.round(((state.currentMonthRevenue || 0) / (state.monthlyQuota || state.quota || 80000)) * 100),
+    dealsWon: state.dealsWonThisMonth || 0,
+    dealsLost: state.dealsLostThisMonth || 0,
+    dealsNAD: state.dealsNADThisMonth || 0,
+    hitQuota: (state.currentMonthRevenue || 0) >= (state.monthlyQuota || state.quota || 80000),
+    inProgress: true,
+  };
 }
 
 // ─── Action handlers ──────────────────────────────────────────────────────────
@@ -697,15 +753,7 @@ export function actionScheduleDemo(state, oppId, chosenDayOffset) {
       o.demoDay = demoDay;
       o.log.push(`${formatDate(draft.date)}: Demo scheduled for ${formatDate(dayNumberToDate(demoDay))}`);
       draft.calendarEvents.push({ day: demoDay, oppId, type: 'demo' });
-      if (!hasSkill(draft, 'schedulingFree')) { draft.actionsRemaining--; draft.actionsUsedToday++; }
-      draft.emails.push(makeEmail({
-        from: 'CRM System',
-        subject: `Demo confirmed — ${opp.company}`,
-        body: `Your demo with ${opp.name} at ${opp.company} is confirmed for ${formatDate(dayNumberToDate(demoDay))}.\n\nRemember: you must host this demo on the day it's scheduled or the opportunity will be lost.`,
-        time: formatDate(draft.date),
-        type: 'confirm',
-        oppId,
-      }));
+      if (!hasSkill(draft, 'schedulingFree')) { draft.actionsRemaining--; }
     }
   };
 }
@@ -733,25 +781,37 @@ export function actionHostDemo(state, oppId, miniGameScore) {
       o.prob              = Math.max(5, Math.min(95, o.prob + probAdjust));
       o.log.push(`${formatDate(draft.date)}: Demo hosted. Grade ${grade}. Prob → ${o.prob}%`);
       draft.actionsRemaining--;
-      draft.actionsUsedToday++;
       // Personality reveal after demo (pattern_recognition skill)
       if (hasSkill(draft, 'personalityRevealPostDemo')) o.personalityRevealed = true;
       // Temperature boost for hosting demo on time
       if (o.demoDay !== null && draft.dayNumber <= o.demoDay) {
         o.temperature = Math.min(100, (o.temperature || 75) + 5);
       }
+      // Store demo score on opp
+      o.demoScore = grade === 'A' ? 90 : grade === 'B' ? 70 : grade === 'C' ? 50 : 25;
       // Champion: stakeholder flag
       if (o.personalityType === 'champion' && !o._championStakeholderSent) {
         o._championStakeholderSent = true;
       }
-      draft.emails.push(makeEmail({
-        from: 'CRM System',
-        subject: `Demo complete — schedule pricing for ${opp.company}`,
-        body: `Well done hosting your demo with ${opp.name} at ${opp.company}!\n\nDeal details now unlocked:\nValue: $${o.value.toLocaleString()} · Close probability: ${o.prob}%\n\nNext step: schedule a pricing meeting within ${PRICING_WINDOW} business days (by ${formatDate(dayNumberToDate(o.pricingScheduleBy))}).`,
-        time: formatDate(draft.date),
-        type: 'task',
-        oppId,
-      }));
+      {
+        const gradeReaction = grade === 'A'
+          ? 'The buyer was engaged throughout and asked detailed follow-up questions.'
+          : grade === 'B'
+          ? 'The buyer responded positively to most of the presentation with a few questions outstanding.'
+          : grade === 'C'
+          ? 'Interest levels were mixed — the buyer seemed distracted for portions of the presentation.'
+          : 'The buyer appeared disengaged. Several slides did not land as intended.';
+        const tempLabel = (o.temperature || 75) >= 75 ? 'Hot' : (o.temperature || 75) >= 50 ? 'Warm' : (o.temperature || 75) >= 25 ? 'Cooling' : 'Cold';
+        draft.emails.push(makeEmail({
+          from: 'CRM System',
+          subject: `Demo Complete — ${opp.company} — Grade ${grade}`,
+          body: `Your demo with ${opp.name} at ${opp.company} is complete.\n\nDEMO GRADE: ${grade}\nBUYER REACTION: ${gradeReaction}\n\nDEAL INTELLIGENCE:\nEstimated deal value: $${o.value.toLocaleString()}\nLikelihood to close: ${o.prob}%\nBuyer temperature: ${tempLabel}\n\nNEXT STEP: Schedule a pricing meeting within 5 business days.`,
+          time: formatDate(draft.date),
+          type: 'task',
+          oppId,
+          actionType: 'schedule-pricing',
+        }));
+      }
       // BDR auto follow-up
       const followBdr = getActiveBDR(draft);
       if (followBdr.autoActions.includes('autoFollowUp')) {
@@ -783,15 +843,7 @@ export function actionSchedulePricing(state, oppId, chosenDayOffset) {
       o.pricingDay = pricingDay;
       o.log.push(`${formatDate(draft.date)}: Pricing meeting scheduled for ${formatDate(dayNumberToDate(pricingDay))}`);
       draft.calendarEvents.push({ day: pricingDay, oppId, type: 'pricing' });
-      if (!hasSkill(draft, 'schedulingFree')) { draft.actionsRemaining--; draft.actionsUsedToday++; }
-      draft.emails.push(makeEmail({
-        from: 'CRM System',
-        subject: `Pricing meeting set — ${opp.company}`,
-        body: `Pricing meeting with ${opp.name} confirmed for ${formatDate(dayNumberToDate(pricingDay))}.\n\nIMPORTANT: You must build the proposal before this meeting or the opportunity will be lost.`,
-        time: formatDate(draft.date),
-        type: 'confirm',
-        oppId,
-      }));
+      if (!hasSkill(draft, 'schedulingFree')) { draft.actionsRemaining--; }
       // Champion: stakeholder email
       if (o.personalityType === 'champion' && !o._championStakeholderSent) {
         o._championStakeholderSent = true;
@@ -805,7 +857,7 @@ export function actionSchedulePricing(state, oppId, chosenDayOffset) {
   };
 }
 
-export function actionBuildProposal(state, oppId, miniGameScore, valueMultiplier = 1.0) {
+export function actionBuildProposal(state, oppId, miniGameScore, valueMultiplier = 1.0, proposalScore) {
   const opp = state.opportunities.find(o => o.id === oppId);
   if (!opp)                              return { success: false, message: 'Opportunity not found.' };
   if (opp.stage !== STAGES.PROPOSAL)     return { success: false, message: 'Not in proposal stage.' };
@@ -822,14 +874,14 @@ export function actionBuildProposal(state, oppId, miniGameScore, valueMultiplier
       o.proposalBuiltDay   = draft.dayNumber;
       o.proposalMultiplier = valueMultiplier;
       o.prob               = Math.max(5, Math.min(95, o.prob + probAdjust));
+      o.proposalScore      = proposalScore !== undefined ? proposalScore : 50;
       o.log.push(`${formatDate(draft.date)}: Proposal built. Score ${miniGameScore}. Mult ${valueMultiplier}. Prob → ${o.prob}%`);
       draft.actionsRemaining--;
-      draft.actionsUsedToday++;
     }
   };
 }
 
-export function actionHostPricing(state, oppId, miniGameScore, finalValue = null) {
+export function actionHostPricing(state, oppId, miniGameScore, finalValue = null, pricingScore) {
   const opp = state.opportunities.find(o => o.id === oppId);
   if (!opp)                                       return { success: false, message: 'Opportunity not found.' };
   if (opp.stage !== STAGES.PRICING_SCHEDULED)     return { success: false, message: 'Proposal not built yet.' };
@@ -848,12 +900,12 @@ export function actionHostPricing(state, oppId, miniGameScore, finalValue = null
       o.pricingHostedDay = draft.dayNumber;
       o.liveCallBy       = draft.dayNumber + LIVE_CALL_DEADLINE;
       o.prob             = Math.max(5, Math.min(95, o.prob + probAdjust));
+      o.pricingScore     = pricingScore !== undefined ? pricingScore : 50;
       o.log.push(`${formatDate(draft.date)}: Pricing hosted. Score ${miniGameScore}. Prob → ${o.prob}%`);
       draft.actionsRemaining--;
-      draft.actionsUsedToday++;
       draft.emails.push(makeEmail({
         from: 'CRM System',
-        subject: `Call ${opp.name} within 7 days to close`,
+        subject: `Pricing complete — ${opp.company} — call to close`,
         body: `Pricing meeting complete with ${o.name} at ${o.company}.\n\nFinal deal value: $${o.value.toLocaleString()}\nClose probability: ${o.prob}%\n\nCall them by ${formatDate(dayNumberToDate(o.liveCallBy))} or this opportunity will be marked lost.`,
         time: formatDate(draft.date),
         type: 'task',
@@ -873,7 +925,6 @@ export function actionBuyerWalkaway(state, oppId) {
       o.stage = STAGES.LOST;
       o.log.push(`${formatDate(draft.date)}: LOST — buyer walked away during pricing meeting`);
       draft.actionsRemaining = Math.max(0, draft.actionsRemaining - 1);
-      draft.actionsUsedToday++;
       draft.emails.push(makeEmail({
         from: 'CRM System',
         subject: `Lost — ${o.company} walked away`,
@@ -888,27 +939,68 @@ export function actionCloseCall(state, oppId, miniGameScore) {
   const opp = state.opportunities.find(o => o.id === oppId);
   if (!opp)                              return { success: false, message: 'Opportunity not found.' };
   if (opp.stage !== STAGES.LIVE_CALL)    return { success: false, message: 'Not in live call stage.' };
+  if (opp.pricingHostedDay === state.dayNumber)
+    return { success: false, message: 'You just had the pricing meeting today. Give them at least one day before calling to close.' };
   if (state.actionsRemaining <= 0)       return { success: false, message: 'No actions remaining today.' };
 
-  const probAdjust = miniGameScore >= 100 ? 15 : miniGameScore >= 75 ? 8 : miniGameScore >= 50 ? 3 : miniGameScore >= 25 ? -5 : -15;
-  const bdrEntry   = getActiveBDR(state);
-  const bdrMod     = Math.round((bdrEntry.closeRateModifier || 0) * 100);
+  // Cumulative scoring system
+  const demoScore     = opp.demoScore     || 50;
+  const proposalScore = opp.proposalScore || 50;
+  const pricingScore  = opp.pricingScore  || 50;
+  const dialogueScore = miniGameScore;
 
-  // Temperature modifier on close
-  const temp    = opp.temperature || 75;
-  const tempMod = temp >= 76 ? 10 : temp >= 51 ? 0 : temp >= 26 ? -10 : -20;
+  const cumulative = Math.round(
+    demoScore     * 0.3 +
+    proposalScore * 0.3 +
+    pricingScore  * 0.2 +
+    dialogueScore * 0.2
+  );
 
-  const closeBonus    = hasSkill(state, 'closeCallProbBonus') ? 5 : 0;
-  const finalProb     = Math.max(5, Math.min(95, opp.prob + (opp.probBoost || 0) + probAdjust + bdrMod + tempMod + closeBonus));
-  const roll          = Math.random() * 100;
+  // Base win/loss rates from cumulative score (NAD always fills remainder to ~50%)
+  let baseWin, baseLoss;
+  if      (cumulative >= 90) { baseWin = 40; baseLoss = 10; }
+  else if (cumulative >= 75) { baseWin = 32; baseLoss = 18; }
+  else if (cumulative >= 60) { baseWin = 25; baseLoss = 25; }
+  else if (cumulative >= 40) { baseWin = 15; baseLoss = 35; }
+  else                       { baseWin =  8; baseLoss = 42; }
 
-  // Win rate adjustment for elite_closer skill
-  const effectiveWinRate = WIN_RATE + (hasSkill(state, 'winRateBoost') ? 0.07 : 0);
+  // Temperature modifier
+  const temp = opp.temperature || 50;
+  const tempWinMod  = temp >= 75 ? 8 : temp >= 50 ? 0 : temp >= 25 ? -8 : -15;
+  const tempLossMod = temp >= 75 ? -8 : temp >= 50 ? 0 : temp >= 25 ? 8 : 15;
 
+  // Skills
+  const closeBonus = hasSkill(state, 'closeCallProbBonus') ? 5 : 0;
+  const winBoost   = hasSkill(state, 'winRateBoost') ? 7 : 0;
+
+  // Market effects
+  let marketWinMod = 0;
+  (state.activeMarketEffects || []).forEach(e => {
+    if (e.type === 'allOppsCloseProbBoost')    marketWinMod += 10;
+    if (e.type === 'allOppsCloseProbPenalty')  marketWinMod -= 10;
+  });
+
+  // Personality modifier
+  const persData = BUYER_PERSONALITIES[opp.personalityType];
+  const persWinMod = (persData && persData.baseProbModifier) ? Math.round(persData.baseProbModifier / 3) : 0;
+
+  let adjWin  = baseWin  + tempWinMod  + closeBonus + winBoost + marketWinMod + persWinMod;
+  let adjLoss = baseLoss + tempLossMod - closeBonus - winBoost - marketWinMod - persWinMod;
+
+  adjWin  = Math.max(0, Math.min(90, adjWin));
+  adjLoss = Math.max(0, Math.min(90, adjLoss));
+  const total = adjWin + adjLoss;
+  if (total > 50) {
+    const factor = 50 / total;
+    adjWin  = Math.round(adjWin  * factor);
+    adjLoss = Math.round(adjLoss * factor);
+  }
+
+  const roll = Math.random() * 100;
   let outcome;
-  if (roll < finalProb * effectiveWinRate)                              outcome = 'won';
-  else if (roll < finalProb * (effectiveWinRate + LOSS_RATE))           outcome = 'lost';
-  else                                                                   outcome = 'nad';
+  if      (roll < adjWin)            outcome = 'won';
+  else if (roll < adjWin + adjLoss)  outcome = 'lost';
+  else                               outcome = 'nad';
 
   return {
     success: true,
@@ -917,15 +1009,16 @@ export function actionCloseCall(state, oppId, miniGameScore) {
     apply(draft) {
       const o = draft.opportunities.find(x => x.id === oppId);
       o.liveCalledDay = draft.dayNumber;
-      o.prob          = finalProb;
       o.log.push(`${formatDate(draft.date)}: Close call. Score ${miniGameScore}. Roll → ${outcome}`);
       draft.actionsRemaining--;
-      draft.actionsUsedToday++;
 
       if (outcome === 'won') {
         o.stage = STAGES.WON;
-        draft.won          += o.value;
-        draft.monthRevenue += o.value;
+        draft.won                  += o.value;
+        draft.monthRevenue         += o.value;
+        draft.currentMonthRevenue   = (draft.currentMonthRevenue || 0) + o.value;
+        draft.currentYearRevenue    = (draft.currentYearRevenue || 0) + o.value;
+        draft.dealsWonThisMonth     = (draft.dealsWonThisMonth || 0) + 1;
         draft.wonDeals.push({ oppId, value: o.value, day: draft.dayNumber, name: o.name, company: o.company });
         draft.emails.push(makeEmail({
           from: 'CRM System',
@@ -972,6 +1065,7 @@ export function actionCloseCall(state, oppId, miniGameScore) {
         draft.pendingWinBanner = { company: o.company, value: o.value };
       } else if (outcome === 'lost') {
         o.stage = STAGES.LOST;
+        draft.dealsLostThisMonth = (draft.dealsLostThisMonth || 0) + 1;
         // Win streak reset (unless thick_skin skill)
         if (!hasSkill(draft, 'streakProtection')) draft.currentWinStreak = 0;
         draft.emails.push(makeEmail({
@@ -989,8 +1083,10 @@ export function actionCloseCall(state, oppId, miniGameScore) {
           time: formatDate(draft.date), type: 'loss', oppId,
         }));
       } else {
-        o.stage        = STAGES.FUTURE;
-        o.futureExpiry = draft.dayNumber + FUTURE_REBOOK_WINDOW;
+        o.stage          = STAGES.FUTURE;
+        o.futureExpiry   = draft.dayNumber + FUTURE_REBOOK_WINDOW;
+        o.futureClosedDay = draft.dayNumber;
+        draft.dealsNADThisMonth = (draft.dealsNADThisMonth || 0) + 1;
         draft.emails.push(makeEmail({
           from: 'CRM System',
           subject: `No decision — ${o.company} moved to futures`,
@@ -1035,7 +1131,30 @@ export function actionTouchBase(state, oppId) {
       o.temperature = Math.min(100, (o.temperature || 75) + (tbFree ? tbBonus * 2 : tbBonus));
       (o.temperatureHistory = o.temperatureHistory || []).push({ day: draft.dayNumber, delta: tbFree ? tbBonus * 2 : tbBonus, reason: 'touch-base' });
       o.log.push(`${formatDate(draft.date)}: Touch base call`);
-      if (!tbFree) { draft.actionsRemaining--; draft.actionsUsedToday++; }
+      if (!o.closePersonalityRevealed) o.closePersonalityRevealed = true;
+      if (!tbFree) { draft.actionsRemaining--; }
+    }
+  };
+}
+
+export function actionPrepCloseCall(state, oppId) {
+  const opp = state.opportunities.find(o => o.id === oppId);
+  if (!opp)                           return { success: false, message: 'Opportunity not found.' };
+  if (opp.stage !== STAGES.LIVE_CALL) return { success: false, message: 'Opportunity is not in the closing stage.' };
+  if (state.actionsRemaining <= 0)    return { success: false, message: 'No actions remaining today.' };
+  const cp = CLOSE_PERSONALITY_TYPES[opp.closePersonalityType] || {};
+  return {
+    success: true,
+    revealed: !opp.closePersonalityRevealed,
+    closePersonalityType:  opp.closePersonalityType,
+    closePersonalityLabel: cp.label || opp.closePersonalityType,
+    closePersonalityIcon:  cp.icon  || '?',
+    closePersonalityHint:  cp.hint  || '',
+    apply(draft) {
+      const o = draft.opportunities.find(x => x.id === oppId);
+      o.closePersonalityRevealed = true;
+      o.log.push(`${formatDate(draft.date)}: Pre-close prep call — communication style identified`);
+      draft.actionsRemaining--;
     }
   };
 }
@@ -1049,7 +1168,6 @@ export function actionSubmitForecast(state, submissions) {
       draft.pipelineReviewSubmitted = true;
       draft.pipelineReviewIgnoreCount = 0;
       draft.actionsRemaining = Math.max(0, draft.actionsRemaining - 1);
-      draft.actionsUsedToday++;
       // Update the pipeline review email body with confirmation
       if (draft.pipelineReviewEmailId) {
         const email = draft.emails.find(e => e.id === draft.pipelineReviewEmailId);
@@ -1077,7 +1195,6 @@ export function actionRebookCall(state, oppId, miniGameScore) {
     apply(draft) {
       const o = draft.opportunities.find(x => x.id === oppId);
       draft.actionsRemaining--;
-      draft.actionsUsedToday++;
       o.log.push(`${formatDate(draft.date)}: Rebook call. Score ${miniGameScore}. Rebooked: ${rebooked}`);
 
       if (rebooked) {
@@ -1193,32 +1310,91 @@ export function advanceDay(state) {
   draft.dayNumber++;
   draft.date             = dayNumberToDate(draft.dayNumber);
   draft.actionsRemaining = ACTIONS_PER_DAY;
-  draft.actionsUsedToday = 0;
 
   const today = draft.dayNumber;
   const { gameMonth, month: monthInQ, quarter } = draft.date;
 
+  // ── Year-end detection (day 240 = start of non-existent year 2) ──
+  if (draft.dayNumber === 240) {
+    draft.pendingYearEnd = true;
+    draft.gameCompleted  = true;
+    return draft;
+  }
+
   // ── Month / quarter transition ──
   if (gameMonth !== prevDate.gameMonth) {
     const prevMonthIdx = prevDate.month - 1; // 0-indexed within quarter
-    draft.quarterMonthHits[prevMonthIdx] = (draft.monthRevenue >= draft.quota);
+    const monthQuota   = draft.monthlyQuota || draft.quota || 80000;
+    const monthRev     = draft.currentMonthRevenue || 0;
+    const hitQuota     = monthRev >= monthQuota;
+    const attainment   = monthQuota > 0 ? Math.round((monthRev / monthQuota) * 100) : 0;
+
+    // Finalise current month record
+    const finalisedRecord = {
+      quarter: prevDate.quarter,
+      month: prevDate.gameMonth,
+      monthInQuarter: prevDate.month,
+      quota: monthQuota,
+      revenue: monthRev,
+      attainment,
+      dealsWon: draft.dealsWonThisMonth || 0,
+      dealsLost: draft.dealsLostThisMonth || 0,
+      dealsNAD: draft.dealsNADThisMonth || 0,
+      hitQuota,
+    };
+    draft.performanceHistory.push(finalisedRecord);
+
+    // Update titleProgress
+    if (hitQuota) draft.titleProgress = (draft.titleProgress || 0) + 1;
+
+    // Track quarter month hits (legacy compat)
+    draft.quarterMonthHits[prevMonthIdx] = hitQuota;
     draft.monthRevenue = 0;
 
-    if (quarter !== prevDate.quarter) {
-      // New quarter: evaluate quota scaling
-      if (draft.quarterMonthHits.every(Boolean)) {
-        draft.quota = Math.min(QUOTA_MAX, Math.round(draft.quota * QUOTA_INCREASE_PCT));
-        draft.emails.push(makeEmail({
-          from: 'Manager — Dave H.',
-          subject: `Quota increase — you hit it in Q${prevDate.quarter}!`,
-          body: `You hit quota all 3 months of Q${prevDate.quarter}. Your monthly quota for Q${quarter} has increased to $${draft.quota.toLocaleString()}.\n\nKeep it up!\n\nDave`,
-          time: formatDate(draft.date), type: 'manager',
-        }));
-        // BDR unlocks on full quota completion
+    const isQuarterEnd = (quarter !== prevDate.quarter);
+
+    if (isQuarterEnd) {
+      // Quarterly email
+      const qStart = (prevDate.quarter - 1) * 3;
+      const qRecords = draft.performanceHistory.slice(qStart, qStart + 3);
+      const qRevenue = qRecords.reduce((a, m) => a + m.revenue, 0);
+      const qQuota   = qRecords.reduce((a, m) => a + m.quota, 0);
+      const quarterAttainment = qQuota > 0 ? Math.round((qRevenue / qQuota) * 100) : 0;
+      const allHit   = qRecords.every(m => m.hitQuota);
+      const anyHit   = qRecords.some(m => m.hitQuota);
+
+      // Quota scaling
+      if (allHit) {
+        draft.quota       = Math.min(QUOTA_MAX, Math.round(draft.quota * QUOTA_INCREASE_PCT));
+        draft.monthlyQuota = draft.quota;
+        draft.territoryLevel = (draft.territoryLevel || 0) + 1;
+      } else {
+        draft.territoryLevel = Math.max(0, (draft.territoryLevel || 0) - 1);
+      }
+
+      const newMonthlyQuota = draft.monthlyQuota || draft.quota || 80000;
+
+      let qBody;
+      if (allHit) {
+        qBody = `Q${prevDate.quarter} is in the books and you delivered. $${qRevenue.toLocaleString()} against a $${qQuota.toLocaleString()} quarterly target. Well done. I've been talking to regional about your territory and they've agreed to expand your patch. You'll start seeing more inbound bookings from next week — higher value accounts too. Don't let the pipeline get away from you. Quota goes up next quarter to $${newMonthlyQuota.toLocaleString()}/month. You earned it.`;
+      } else if (anyHit) {
+        qBody = `Mixed quarter. You had some good months and some that fell short. $${qRevenue.toLocaleString()} against $${qQuota.toLocaleString()}. Quota stays the same next quarter at $${newMonthlyQuota.toLocaleString()}/month. The territory stays as is. Focus on consistency — one good month doesn't make a quarter.`;
+      } else {
+        qBody = `Q${prevDate.quarter} was not good enough. $${qRevenue.toLocaleString()} against $${qQuota.toLocaleString()}. I've spoken with regional and they've asked us to pull back on some of the inbound volume until activity improves. Quota holds at $${newMonthlyQuota.toLocaleString()} but you'll notice fewer bookings coming through. Prove you can handle what you have before we expand your territory.`;
+      }
+
+      draft.emails.push(makeEmail({
+        from: 'Manager — Dave H.',
+        subject: `Q${prevDate.quarter} Wrap-Up — ${quarterAttainment}% — ${allHit ? 'Hit' : 'Missed'} Quota`,
+        body: qBody,
+        time: formatDate(draft.date), type: 'manager',
+      }));
+
+      // BDR unlocks on full quota completion
+      if (allHit) {
         if (prevDate.quarter === 1 && !draft.availableBDRs.includes('senior')) {
           draft.q1AboveQuota = true;
           draft.availableBDRs.push('senior');
-          draft.bdrUnlockLog.push({ day: today, bdrId: 'senior' });
           draft.emails.push(makeEmail({
             from: 'HR System',
             subject: 'New BDR available — Q1 quota bonus',
@@ -1229,7 +1405,6 @@ export function advanceDay(state) {
         if (prevDate.quarter === 2 && !draft.availableBDRs.includes('elite')) {
           draft.q2AboveQuota = true;
           draft.availableBDRs.push('elite');
-          draft.bdrUnlockLog.push({ day: today, bdrId: 'elite' });
           draft.emails.push(makeEmail({
             from: 'HR System',
             subject: 'New BDR available — Q2 quota bonus',
@@ -1238,9 +1413,55 @@ export function advanceDay(state) {
           }));
         }
       }
+
       draft.quarterMonthHits = [false, false, false];
-      // Trigger quarterly review UI
       draft.pendingQuarterlyReview = true;
+    } else {
+      // Monthly wrap-up email (not month 3 of quarter — that's handled by quarterly email)
+      let monthBody;
+      if (attainment >= 100) {
+        monthBody = `Strong month. You hit quota and then some. $${monthRev.toLocaleString()} against a $${monthQuota.toLocaleString()} target. Keep that energy going into Month ${prevDate.gameMonth + 1}. The pipeline is looking healthy.`;
+      } else if (attainment >= 80) {
+        monthBody = `Close but not quite. $${monthRev.toLocaleString()} against $${monthQuota.toLocaleString()}. You left some on the table. What's sitting in the pipeline that could have closed? Let's talk about it.`;
+      } else if (attainment >= 60) {
+        monthBody = `Below quota again. $${monthRev.toLocaleString()} against $${monthQuota.toLocaleString()}. I need to see more urgency. Your pipeline has deals in it — they need to move.`;
+      } else {
+        monthBody = `This is a problem. $${monthRev.toLocaleString()} against $${monthQuota.toLocaleString()}. I'm not going to sugarcoat it. We need a serious conversation about your activity levels. See me Monday.`;
+      }
+      draft.emails.push(makeEmail({
+        from: 'Manager — Dave H.',
+        subject: `Month ${prevDate.gameMonth} Wrap-Up — ${attainment}% to Goal`,
+        body: monthBody,
+        time: formatDate(draft.date), type: 'manager',
+      }));
+    }
+
+    // Reset month trackers
+    draft.currentMonthRevenue  = 0;
+    draft.dealsWonThisMonth    = 0;
+    draft.dealsLostThisMonth   = 0;
+    draft.dealsNADThisMonth    = 0;
+    draft.birthdayFiredThisMonth = false;
+
+    // Leaderboard reset for new month
+    if (draft.leaderboard) {
+      draft.leaderboard.forEach(c => { c.attainment = 0; c.dealsWon = 0; c.revenue = 0; });
+    }
+
+    // Recalculate projectedYearlyQuota
+    const completedMonths = draft.performanceHistory.length;
+    draft.projectedYearlyQuota = (draft.projectedYearlyQuota || Array(12).fill(draft.monthlyQuota)).map((v, i) =>
+      i < completedMonths ? draft.performanceHistory[i].quota : (draft.monthlyQuota || draft.quota || 80000)
+    );
+  }
+
+  // ── Birthday check ──
+  {
+    const bProfile = (() => { try { const r = localStorage.getItem('phs_playerProfile'); return r ? JSON.parse(r) : null; } catch(e) { return null; } })();
+    if (bProfile && bProfile.playerBirthMonth && draft.date.gameMonth === bProfile.playerBirthMonth && !draft.birthdayFiredThisMonth) {
+      draft.birthdayFiredThisMonth = true;
+      draft.pendingBirthday = bProfile.playerFirstName || 'there';
+      draft.pendingBirthdayFav = bProfile.playerFavouriteThing || 'something';
     }
   }
 
@@ -1435,34 +1656,83 @@ export function advanceDay(state) {
   });
 
   // ── New inbound bookings ──
-  const rate         = BOOKING_RATES[gameMonth] || 3.0;
-  const dailyChance  = rate / 5;
-  const roll1        = Math.random();
-  const newBookings  = roll1 < dailyChance ? (Math.random() < 0.25 ? 2 : 1) : 0;
+  const rate                 = BOOKING_RATES[gameMonth] || 3.0;
+  const bookingRateMultiplier = 1.0 + ((draft.territoryLevel || 0) * 0.2);
+  const adjustedRate         = rate * bookingRateMultiplier;
+  const dailyChance          = adjustedRate / 5;
+  const roll1                = Math.random();
+  const newBookings          = roll1 < dailyChance ? (Math.random() < 0.25 ? 2 : 1) : 0;
+
+  function _sendBookingEmail(newOpp) {
+    const bkBdr   = getActiveBDR(draft);
+    const bdrTier = bkBdr.tier || 0;
+    let bookingBody = `A new demo has been requested by ${newOpp.name} at ${newOpp.company}.`;
+    if (bdrTier >= 1) bookingBody += `\n\n${newOpp.flavourNote}`;
+    if (bdrTier >= 2) {
+      const pers = BUYER_PERSONALITIES[newOpp.personalityType];
+      const hintKey = `tier${Math.min(bdrTier, 4)}`;
+      if (pers && pers.bdrHints && pers.bdrHints[hintKey]) {
+        bookingBody += `\n\nBuyer Intelligence: ${pers.bdrHints[hintKey]}`;
+      }
+    }
+    if (bdrTier >= 3) {
+      // Jordan (tier 3) and Sam (tier 4) profile close communication style
+      newOpp.closePersonalityRevealed = true;
+      const cp = CLOSE_PERSONALITY_TYPES[newOpp.closePersonalityType];
+      if (cp) bookingBody += `\n\nClose Style (${bkBdr.name}): ${cp.icon} ${cp.label} — ${cp.hint}`;
+    }
+    draft.emails.push(makeEmail({
+      from:       'CRM System',
+      subject:    `New Demo Request — ${newOpp.company}`,
+      body:       bookingBody,
+      time:       formatDate(draft.date),
+      type:       'task',
+      oppId:      newOpp.id,
+      actionType: 'schedule-demo',
+    }));
+  }
 
   for (let i = 0; i < newBookings; i++) {
     const opp = generateOpportunity(draft);
     draft.opportunities.push(opp);
-    const bkBdr = getActiveBDR(draft);
-    draft.emails.push(makeEmail({
-      from:       opp.name + ' — ' + opp.company,
-      subject:    `New demo request — ${opp.company}`,
-      body:       `Hi,\n\n${buildBookingEmailBody(opp, bkBdr.tier, bkBdr.name)}`,
-      time:       formatDate(draft.date),
-      type:       'task',
-      oppId:      opp.id,
-      actionType: 'schedule-demo',
-    }));
-    draft.log.push(`${formatDate(draft.date)}: New inbound — ${opp.name} at ${opp.company}`);
+    _sendBookingEmail(opp);
+  }
+
+  // High-value opps on Monday if territoryLevel > 0
+  if (draft.date.day === 1 && (draft.territoryLevel || 0) > 0) {
+    for (let t = 0; t < draft.territoryLevel; t++) {
+      const hvOpp   = generateOpportunity(draft);
+      const hvValue = 40000 + (draft.territoryLevel - 1) * 15000;
+      hvOpp.value     = hvValue;
+      hvOpp.highValue = true;
+      hvOpp.flavourNote = `${hvOpp.name} reached out directly after a referral from an existing account. They're evaluating solutions for a significant rollout and have executive sponsorship in place.`;
+      draft.opportunities.push(hvOpp);
+      _sendBookingEmail(hvOpp);
+    }
+  }
+
+  // ── Water cooler event tracking ──
+  draft.pendingWaterCooler = false;
+  if (newBookings > 0) {
+    draft.consecutiveDaysNoDemoBooking = 0;
+  } else {
+    draft.consecutiveDaysNoDemoBooking = (draft.consecutiveDaysNoDemoBooking || 0) + 1;
+    if (draft.consecutiveDaysNoDemoBooking >= 3 && !draft.waterCoolerFired) {
+      draft.pendingWaterCooler = true;
+      draft.waterCoolerFired   = true;
+      draft.consecutiveDaysNoDemoBooking = 0;
+    }
   }
 
   // ── Weekly manager email (start of each week) ──
   if (draft.date.day === 1) {
-    const pct     = Math.round((draft.monthRevenue / draft.quota) * 100);
-    const weekNum = Math.floor(draft.dayNumber / 5) + 1;
-    const season  = getSeasonInfo(gameMonth);
+    const curMonRev = draft.currentMonthRevenue || draft.monthRevenue || 0;
+    const curQuota  = draft.monthlyQuota || draft.quota || 80000;
+    const pct       = Math.round((curMonRev / curQuota) * 100);
+    const weekNum   = Math.floor(draft.dayNumber / 5) + 1;
+    const season    = getSeasonInfo(gameMonth);
     let msg;
-    if (pct < 20)   msg = `We're only at ${pct}% of monthly quota. Let's talk urgently — pipeline needs work.`;
+    if (pct < 20)      msg = `We're only at ${pct}% of monthly quota. Let's talk urgently — pipeline needs work.`;
     else if (pct < 50) msg = `At ${pct}% of monthly quota. ${season.isSlow ? 'Slow period — keep loading futures.' : 'Good progress, keep pushing.'}`;
     else if (pct < 80) msg = `${pct}% of monthly quota — solid. Let's close what's in the pipeline.`;
     else               msg = `${pct}% of monthly quota — excellent! One or two more closes and we're there.`;
@@ -1470,7 +1740,7 @@ export function advanceDay(state) {
     draft.emails.push(makeEmail({
       from:    'Manager — Dave H.',
       subject: `Week ${weekNum} check-in: ${pct}% of monthly quota`,
-      body:    `Hey,\n\n${msg}\n\nActive opps: ${draft.opportunities.filter(o => ![STAGES.WON, STAGES.LOST].includes(o.stage)).length}\nWon this month: $${draft.monthRevenue.toLocaleString()} of $${draft.quota.toLocaleString()}\n\nTalk soon,\nDave`,
+      body:    `Hey,\n\n${msg}\n\nActive opps: ${draft.opportunities.filter(o => ![STAGES.WON, STAGES.LOST].includes(o.stage)).length}\nWon this month: $${curMonRev.toLocaleString()} of $${curQuota.toLocaleString()}\n\nTalk soon,\nDave`,
       time:    formatDate(draft.date), type: 'manager',
     }));
   }
@@ -1478,7 +1748,6 @@ export function advanceDay(state) {
   // ── BDR day-based unlock checks ──
   if (today === 5 && !draft.availableBDRs.includes('basic')) {
     draft.availableBDRs.push('basic');
-    draft.bdrUnlockLog.push({ day: today, bdrId: 'basic' });
     draft.emails.push(makeEmail({
       from: 'HR System',
       subject: 'A BDR has been assigned to your territory',
@@ -1488,7 +1757,6 @@ export function advanceDay(state) {
   }
   if (today === 20 && !draft.availableBDRs.includes('standard')) {
     draft.availableBDRs.push('standard');
-    draft.bdrUnlockLog.push({ day: today, bdrId: 'standard' });
     draft.emails.push(makeEmail({
       from: 'HR System',
       subject: 'Alex Chen is now available for hire',
@@ -1575,11 +1843,10 @@ export function advanceDay(state) {
     }
   }
 
-  // ── Leaderboard weekly drift ──
+  // ── Leaderboard daily drift ──
   if (draft.leaderboard) {
     draft.leaderboard.forEach(c => {
-      const drift = (Math.random() - 0.45) * 5;
-      c.attainment = Math.max(0, Math.round(c.attainment + drift));
+      c.attainment = Math.min(150, c.attainment + Math.floor(Math.random() * 10) + 1);
     });
   }
 
@@ -1599,16 +1866,30 @@ export function advanceDay(state) {
 // ─── Persistence ──────────────────────────────────────────────────────────────
 
 export function saveState(state) {
-  try { localStorage.setItem('salesSim_state', JSON.stringify(state)); return true; }
+  try { localStorage.setItem('phs_gameState', JSON.stringify(state)); return true; }
   catch (e) { console.error('Save failed:', e); return false; }
 }
 
 export function loadState() {
-  try { const r = localStorage.getItem('salesSim_state'); return r ? JSON.parse(r) : null; }
+  try {
+    let r = localStorage.getItem('phs_gameState');
+    if (!r) {
+      // Migration: check old key
+      const old = localStorage.getItem('salesSim_state');
+      if (old) {
+        localStorage.setItem('phs_gameState', old);
+        localStorage.removeItem('salesSim_state');
+        r = old;
+      }
+    }
+    return r ? JSON.parse(r) : null;
+  }
   catch (e) { console.error('Load failed:', e); return null; }
 }
 
 export function clearState() {
+  localStorage.removeItem('phs_gameState');
+  // also clear old key if present
   localStorage.removeItem('salesSim_state');
 }
 

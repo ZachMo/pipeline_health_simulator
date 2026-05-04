@@ -189,7 +189,7 @@ html, body {
 /* ── Main grid ──────────────────────────────────────────────────────────────── */
 .main-grid {
   display: grid;
-  grid-template-columns: 1fr 1.6fr;
+  grid-template-columns: 1.25fr 1.6fr;
   grid-template-rows: auto auto;
   gap: 6px;
   padding: 6px 8px;
@@ -262,12 +262,135 @@ html, body {
   background: #ffffff;
 }
 
+/* ── Phone layout ───────────────────────────────────────────────────────────── */
+.phone-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  align-items: stretch;
+}
+.phone-profile {
+  width: 115px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  background: #ffffff;
+  border-right: 2px solid #808080;
+  overflow: hidden;
+}
+.phone-profile-avatar {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+  flex-shrink: 0;
+}
+.phone-profile-info {
+  width: 100%;
+  text-align: center;
+}
+.phone-profile-name {
+  font-size: 10px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  color: #000000;
+  text-transform: uppercase;
+  word-break: break-word;
+  line-height: 1.3;
+}
+.phone-profile-title {
+  font-size: 10px;
+  font-family: Arial, sans-serif;
+  color: #000080;
+  line-height: 1.3;
+  margin-top: 3px;
+}
+.phone-profile-id {
+  font-size: 9px;
+  font-family: 'Courier New', monospace;
+  color: #808080;
+  margin-top: 2px;
+}
+.phone-profile-dept {
+  font-size: 8px;
+  font-family: Arial, sans-serif;
+  font-weight: bold;
+  color: #808080;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-top: 1px solid #c0c0c0;
+  padding-top: 4px;
+  width: 100%;
+  text-align: center;
+}
+.phone-profile-barcode {
+  width: 70px;
+  height: 18px;
+  background: repeating-linear-gradient(
+    90deg,
+    #000000 0px, #000000 2px,
+    transparent 2px, transparent 4px,
+    #000000 4px, #000000 5px,
+    transparent 5px, transparent 7px,
+    #000000 7px, #000000 9px,
+    transparent 9px, transparent 11px,
+    #000000 11px, #000000 12px,
+    transparent 12px, transparent 14px,
+    #000000 14px, #000000 16px,
+    transparent 16px, transparent 18px,
+    #000000 18px, #000000 19px,
+    transparent 19px, transparent 21px,
+    #000000 21px, #000000 23px,
+    transparent 23px, transparent 25px,
+    #000000 25px, #000000 27px,
+    transparent 27px, transparent 28px,
+    #000000 28px, #000000 30px,
+    transparent 30px, transparent 32px,
+    #000000 32px, #000000 33px,
+    transparent 33px, transparent 35px,
+    #000000 35px, #000000 37px,
+    transparent 37px, transparent 39px,
+    #000000 39px, #000000 41px,
+    transparent 41px, transparent 42px,
+    #000000 42px, #000000 44px,
+    transparent 44px, transparent 46px,
+    #000000 46px, #000000 47px,
+    transparent 47px, transparent 49px,
+    #000000 49px, #000000 51px,
+    transparent 51px, transparent 52px,
+    #000000 52px, #000000 54px,
+    transparent 54px, transparent 56px,
+    #000000 56px, #000000 57px,
+    transparent 57px, transparent 59px,
+    #000000 59px, #000000 61px,
+    transparent 61px, transparent 63px,
+    #000000 63px, #000000 65px,
+    transparent 65px, transparent 67px,
+    #000000 67px, #000000 70px
+  );
+  margin-top: auto;
+}
+.phone-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
 /* ── Phone ──────────────────────────────────────────────────────────────────── */
 .phone-body {
   background: #d4d0c8;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  flex: 1;
+  min-height: 0;
 }
 .phone-tabs {
   display: flex;
@@ -424,7 +547,10 @@ html, body {
   padding: 3px 4px 3px 6px;
   background: #000080;
   flex-shrink: 0;
+  cursor: grab;
+  user-select: none;
 }
+.modal-header:active { cursor: grabbing; }
 /* Grip dots on modal title bar */
 .modal-header::before {
   content: '';
@@ -700,7 +826,31 @@ html, body {
   .slide-grid  { grid-template-columns: repeat(3, 1fr); }
   .dond-grid   { grid-template-columns: repeat(4, 1fr); }
   .kanban-board { padding: 4px; }
-  .kanban-col   { padding: 0 4px 4px; min-width: 80px; }
+  .kanban-col   { padding: 0 4px 4px; min-width: 100px; }
+
+  /* Performance modal: stack vertically */
+  .perf-grid { grid-template-columns: 1fr !important; }
+
+  /* Header: two rows */
+  .header-right { flex-wrap: wrap; gap: 4px; }
+  .day-nav { order: -1; }
+
+  /* Email body panel full-screen on mobile when active */
+  .inbox-body.mobile-active {
+    display: flex !important;
+    flex-direction: column;
+    width: 100%;
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    background: #ffffff;
+  }
+
+  /* Phone row min height */
+  .phone-row { min-height: 40px; }
+
+  /* Calendar week grid */
+  .cal-grid { gap: 2px; }
 }
 
 @media (max-width: 480px) {
@@ -723,17 +873,16 @@ html, body {
 
 /* ── Employee ID Card ───────────────────────────────────────────────────────── */
 .id-card {
-  position: fixed;
-  top: 6px;
-  right: 10px;
-  z-index: 50;
+  flex-shrink: 0;
+  align-self: center;
   width: 128px;
   background: #ffffff;
   border: 1px solid #808080;
-  box-shadow: 3px 3px 0 #404040, 5px 5px 0 #808080;
+  box-shadow: 2px 2px 0 #808080;
   font-family: 'Courier New', Courier, monospace;
   font-size: 10px;
   user-select: none;
+  margin: 6px auto;
 }
 .id-card-stripe {
   background: #000080;
@@ -1002,4 +1151,80 @@ html, body {
   padding: 2px 6px;
   border-radius: 10px;
   margin-left: 4px;
+}
+
+/* ── Header button (Performance etc.) ──────────────────────────────────────── */
+.header-btn {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+}
+
+/* ── Performance modal grid ─────────────────────────────────────────────────── */
+.perf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.perf-card {
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+  padding: 8px 10px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+}
+.perf-card-label {
+  font-size: 10px;
+  color: #808080;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.perf-card-val {
+  font-size: 16px;
+  font-weight: bold;
+  color: #000080;
+}
+.perf-bar-wrap {
+  height: 10px;
+  background: #c0c0c0;
+  border: 1px solid #808080;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.perf-bar {
+  height: 100%;
+  background: #000080;
+  transition: width 0.3s;
+}
+.perf-history-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+  font-size: 10px;
+  font-family: 'Courier New', Courier, monospace;
+}
+.perf-history-label {
+  width: 80px;
+  color: #404040;
+}
+.perf-history-bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: #c0c0c0;
+  border: 1px solid #808080;
+  overflow: hidden;
+}
+.perf-history-bar {
+  height: 100%;
+  background: #000080;
+}
+.perf-history-bar.hit { background: #00aa00; }
+.perf-history-bar.miss { background: #E24B4A; }
+.perf-history-pct {
+  width: 36px;
+  text-align: right;
+  color: #000000;
 }

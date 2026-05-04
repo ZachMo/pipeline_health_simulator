@@ -11,6 +11,8 @@ import {
   actionTouchBase, actionBuyerWalkaway, actionSubmitForecast,
   getActiveOpps, formatDate, dayNumberToDate, nextEmailId,
   BDR_ROSTER, getActiveBDR, hasSkill, SKILL_TREE, BUYER_PERSONALITIES,
+  getCurrentMonthRecord, TITLE_PROGRESSION,
+  CLOSE_PERSONALITY_TYPES,
 } from './engine.js';
 
 import {
@@ -21,6 +23,24 @@ import {
 
 import { CLOSE_DIALOGUES, REBOOK_DIALOGUES } from './dialogues.js';
 import { SLIDE_POOL, BUYER_PROFILES, scoreSlide } from './slides.js';
+
+// ─── Call photo helpers ───────────────────────────────────────────────────────
+
+const _FEMALE_FIRST_NAMES = new Set(['Sandra','Priya','Amy','Rachel','Diana','Elena','Fatima','Yuki','Claudia']);
+
+function _nameHash(name) {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0x7fffffff;
+  return h;
+}
+
+function _getCallPhoto(fullName) {
+  const first = fullName.split(' ')[0];
+  const h = _nameHash(fullName);
+  return _FEMALE_FIRST_NAMES.has(first)
+    ? `female${(h % 5) + 1}.png`
+    : `male${(h % 8) + 1}.png`;
+}
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -72,8 +92,15 @@ function handleEmailAction(actionType, oppId) {
   if (actionType === 'schedule-demo') {
     const opp = state.opportunities.find(o => o.id === oppId);
     if (opp) showScheduleDemoModal(opp);
+  } else if (actionType === 'schedule-pricing') {
+    const opp = state.opportunities.find(o => o.id === oppId);
+    if (opp) showSchedulePricingModal(opp);
   }
 }
+
+window._emailAction = function(actionType, oppId) {
+  handleEmailAction(actionType, oppId);
+};
 
 // ─── Calendar event handler ───────────────────────────────────────────────────
 
@@ -140,6 +167,23 @@ function handleCallClick(oppId) {
       [{ label: 'OK', onclick: 'window.closeModal()' }]);
     return;
   }
+  if (opp.stage === STAGES.LIVE_CALL) {
+    showCloseCallChoiceModal(opp);
+    return;
+  }
+  if (opp.stage === STAGES.FUTURE) {
+    const daysSince = state.dayNumber - (opp.futureClosedDay || 0);
+    if (daysSince < 10) {
+      showModal(
+        `Too early — ${opp.name}`,
+        `<p style="font-size:13px;font-family:Arial,sans-serif;line-height:1.6">"Thank you for reaching out! We appreciated meeting with you and will consider reviewing your solution again in the future."</p>
+         <p style="font-size:11px;color:#808080;font-family:Arial,sans-serif;margin-top:8px">Try again in ${10 - daysSince} day${10 - daysSince !== 1 ? 's' : ''}.</p>`,
+        [{ label: 'OK', onclick: 'window.closeModal()' }],
+        true
+      );
+      return;
+    }
+  }
   launchDialogueMatcher(opp);
 }
 
@@ -151,7 +195,22 @@ function handleContactCall(oppId) {
       [{ label: 'OK', onclick: 'window.closeModal()' }]);
     return;
   }
-  if (opp.stage === STAGES.LIVE_CALL || opp.stage === STAGES.FUTURE) {
+  if (opp.stage === STAGES.LIVE_CALL) {
+    showCloseCallChoiceModal(opp);
+    return;
+  }
+  if (opp.stage === STAGES.FUTURE) {
+    const daysSince = state.dayNumber - (opp.futureClosedDay || 0);
+    if (daysSince < 10) {
+      showModal(
+        `Too early — ${opp.name}`,
+        `<p style="font-size:13px;font-family:Arial,sans-serif;line-height:1.6">"Thank you for reaching out! We appreciated meeting with you and will consider reviewing your solution again in the future."</p>
+         <p style="font-size:11px;color:#808080;font-family:Arial,sans-serif;margin-top:8px">Try again in ${10 - daysSince} day${10 - daysSince !== 1 ? 's' : ''}.</p>`,
+        [{ label: 'OK', onclick: 'window.closeModal()' }],
+        true
+      );
+      return;
+    }
     launchDialogueMatcher(opp);
     return;
   }
@@ -452,7 +511,9 @@ function launchProposalBuilder(opp) {
     );
 
     window._submitProposal = (oppId, score, mult) => {
-      const result = actionBuildProposal(state, oppId, score, mult);
+      const pctScore = score; // already 0-100
+      const proposalScore = pctScore >= 90 ? 95 : pctScore >= 70 ? 80 : pctScore >= 50 ? 60 : 30;
+      const result = actionBuildProposal(state, oppId, score, mult, proposalScore);
       if (result.success) { result.apply(state); closeModal(); renderAll(); }
       else alert(result.message);
     };
@@ -558,7 +619,7 @@ function launchSlidePicker(opp) {
 
 function showSlideResults(opp, scores, score) {
   const totalPoints = scores.reduce((s, r) => s + r.pts, 0);
-  const grade      = totalPoints >= 35 ? 'A' : totalPoints >= 20 ? 'B' : totalPoints >= 5 ? 'C' : 'D';
+  const grade      = totalPoints >= 40 ? 'A' : totalPoints >= 25 ? 'B' : totalPoints >= 10 ? 'C' : 'D';
   const gradeColor = grade === 'A' ? '#1D9E75' : grade === 'B' ? '#378ADD' : grade === 'C' ? '#EF9F27' : '#E24B4A';
   const gradeAdj   = grade === 'A' ? '+15%' : grade === 'B' ? '+8%' : grade === 'C' ? '0%' : '-8%';
 
@@ -627,8 +688,6 @@ function showSlideResults(opp, scores, score) {
       result.apply(state);
       closeModal();
       renderAll();
-      const o = state.opportunities.find(x => x.id === oppId);
-      if (o) setTimeout(() => showSchedulePricingModal(o), 350);
     } else {
       alert(result.message);
     }
@@ -809,7 +868,17 @@ function _completeDealOrNoDeal(opp, finalValue, baseValue, score, source) {
     true
   );
   window._dondComplete = (oppId, fv, sc) => {
-    const result = actionHostPricing(state, oppId, sc, fv);
+    // Compute pricingScore from the multiplier/score
+    // sc is score = Math.round(Math.min(100, (finalValue / (baseValue * 1.1)) * 100))
+    // Approximate: if sc >= 91 → multiplier ≥ 1.0, etc.
+    const finalMult = fv / (Math.round(opp.value * (opp.proposalMultiplier || 1.0)) || 1);
+    const pricingScore = source === 'walkaway' ? 0
+      : finalMult >= 1.0 ? 90
+      : finalMult >= 0.85 ? 75
+      : finalMult >= 0.70 ? 60
+      : finalMult >= 0.55 ? 40
+      : 20;
+    const result = actionHostPricing(state, oppId, sc, fv, pricingScore);
     if (result.success) {
       result.apply(state);
       if (state.pendingWinBanner) {
@@ -826,6 +895,63 @@ function _completeDealOrNoDeal(opp, finalValue, baseValue, score, source) {
   };
 }
 
+// ─── Close call choice modal ──────────────────────────────────────────────────
+
+function showCloseCallChoiceModal(opp) {
+  // Enforce 1-day gap after pricing meeting
+  if (opp.pricingHostedDay === state.dayNumber) {
+    showModal(
+      `Too soon — ${opp.name}`,
+      `<p style="font-size:13px;font-family:Arial,sans-serif;line-height:1.6">You just had the pricing meeting today. Give them at least one day to review before calling to close.</p>`,
+      [{ label: 'OK', onclick: 'window.closeModal()' }],
+      true
+    );
+    return;
+  }
+
+  const revealed = opp.closePersonalityRevealed;
+  const cp       = CLOSE_PERSONALITY_TYPES[opp.closePersonalityType] || {};
+
+  const personalityHtml = revealed
+    ? `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:2px solid;border-color:#ffffff #808080 #808080 #ffffff;background:#e8e8ff;margin-bottom:14px">
+        <div style="font-size:28px;line-height:1">${cp.icon || '?'}</div>
+        <div>
+          <div style="font-size:12px;font-weight:bold;color:#000080;font-family:Arial,sans-serif">Communication style: ${cp.label || opp.closePersonalityType}</div>
+          <div style="font-size:11px;color:#404040;font-family:Arial,sans-serif;margin-top:2px">${cp.hint || ''}</div>
+        </div>
+      </div>`
+    : `<div style="padding:10px 12px;border:2px solid;border-color:#ffffff #808080 #808080 #ffffff;background:#f0f0f0;margin-bottom:14px;font-family:Arial,sans-serif">
+        <div style="font-size:12px;font-weight:bold;color:#808080">Communication style: Unknown</div>
+        <div style="font-size:11px;color:#808080;margin-top:2px">Call the buyer before reaching close stage to reveal their communication style.</div>
+      </div>`;
+
+  const callPhoto = _getCallPhoto(opp.name);
+  showModal(
+    `Close — ${opp.name}`,
+    `<div style="font-family:Arial,sans-serif">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <img src="${callPhoto}" style="width:48px;height:48px;object-fit:cover;border:2px solid;border-color:#ffffff #808080 #808080 #ffffff;flex-shrink:0" alt="${opp.name}" onerror="this.style.display='none'">
+        <div>
+          <div style="font-size:13px;font-weight:bold;color:#000000">${opp.name}</div>
+          <div style="font-size:11px;color:#808080">${opp.company}</div>
+        </div>
+      </div>
+      ${personalityHtml}
+      <p style="font-size:12px;color:#404040;margin:0">Match your responses to the buyer's communication style to score higher on the call.</p>
+    </div>`,
+    [
+      { label: 'Start close call', primary: true, onclick: `window._startCloseCall(${opp.id})` },
+      { label: 'Cancel', onclick: 'window.closeModal()' },
+    ],
+    true
+  );
+
+  window._startCloseCall = function(oppId) {
+    const o = state.opportunities.find(x => x.id === oppId);
+    if (o) launchDialogueMatcher(o);
+  };
+}
+
 // ─── Mini-game 3: Dialogue Matcher ───────────────────────────────────────────
 
 function launchDialogueMatcher(opp) {
@@ -839,8 +965,19 @@ function launchDialogueMatcher(opp) {
     round.options = round.options.sort(() => Math.random() - 0.5);
   });
 
+  const cpKey      = opp.closePersonalityType;
+  const cpRevealed = opp.closePersonalityRevealed;
+  const cpInfo     = CLOSE_PERSONALITY_TYPES[cpKey] || {};
+
   let roundIdx   = 0;
   let totalScore = 0;
+
+  // Personality badge shown above buyer avatar when style is known
+  const personalityBadge = cpRevealed
+    ? `<div style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid #808080;background:#e8e8ff;font-size:10px;font-family:Arial,sans-serif;margin-bottom:6px">
+        ${cpInfo.icon || ''} ${cpInfo.label || cpKey}
+      </div>`
+    : '';
 
   function renderRound() {
     // Auto-correct first round (confident_opener skill)
@@ -853,11 +990,13 @@ function launchDialogueMatcher(opp) {
 
     const round = seq.rounds[roundIdx];
 
+    const dialoguePhoto = _getCallPhoto(opp.name);
     showModal(
       `${isLive ? 'Close call' : 'Rebook call'} — ${opp.name}`,
       `<div class="dialogue-wrap">
+        ${personalityBadge}
         <div class="dialogue-buyer-header">
-          <div class="dialogue-avatar">${opp.name[0]}</div>
+          <img src="${dialoguePhoto}" style="width:30px;height:30px;object-fit:cover;flex-shrink:0;border:2px solid;border-color:#ffffff #808080 #808080 #ffffff" alt="${opp.name}" onerror="this.outerHTML='<div class=\\'dialogue-avatar\\'>${opp.name[0]}</div>'">
           <div>
             <div style="font-size:13px;font-weight:600">${opp.name}</div>
             <div style="font-size:11px;color:var(--text2)">${opp.company}</div>
@@ -879,15 +1018,21 @@ function launchDialogueMatcher(opp) {
 
     window._dialogueChoose = (optIdx) => {
       window._dialogueChoose = () => {}; // prevent double-tap
-      const opt = round.options[optIdx];
-      if (opt.correct) totalScore += 25;
-      else if (opt.partialCredit) totalScore += 10;
+      const opt    = round.options[optIdx];
+      const isMatch = opt.personality === cpKey;
+      if (isMatch) totalScore += 25;
 
-      // Highlight chosen option, fade others
+      // Highlight chosen option, fade others; always reveal correct/wrong
       document.querySelectorAll('.dialogue-opt').forEach((el, i) => {
         el.onclick = null;
-        el.style.opacity   = i === optIdx ? '1' : '0.4';
-        if (i === optIdx) el.style.background = opt.correct ? '#e8f5e9' : opt.partialCredit ? '#fff8e1' : '#fde8e8';
+        const thisOpt = round.options[i];
+        const thisMatch = thisOpt.personality === cpKey;
+        if (i === optIdx) {
+          el.style.opacity   = '1';
+          el.style.background = isMatch ? '#e8f5e9' : '#fde8e8';
+        } else {
+          el.style.opacity = thisMatch ? '0.7' : '0.35';
+        }
       });
 
       // Append "..." typing indicator
@@ -990,27 +1135,20 @@ function showWinBanner(company, value) {
 
 // ─── Day navigation ───────────────────────────────────────────────────────────
 
-window.switchAvatar = function() {
-  state.avatarIndex = state.avatarIndex === 0 ? 1 : 0;
-  renderIdCard(state);
-  saveState(state);
-};
-
-window.nextDay = function() {
-  if (_pbTimerInterval) { clearInterval(_pbTimerInterval); _pbTimerInterval = null; }
-  state = advanceDay(state);
-  _currentEmailId    = null;
-  _expandedContactId = null;
-  renderAll();
-
-  // Check fired first (highest priority)
+function _processPostAdvance() {
+  if (state.pendingYearEnd) {
+    state.pendingYearEnd = false;
+    state.gameCompleted  = true;
+    saveState(state);
+    setTimeout(showYearEndScreen, 300);
+    return;
+  }
   if (state.pendingFired) {
     state.pendingFired = false;
     saveState(state);
     setTimeout(showFiredScreen, 200);
     return;
   }
-  // Meeting interruption
   if (state.pendingMeeting) {
     const meeting = state.pendingMeeting;
     state.pendingMeeting = null;
@@ -1018,23 +1156,73 @@ window.nextDay = function() {
     setTimeout(() => showMeetingInterruptionCard(meeting), 200);
     return;
   }
-  // Quarterly review
   if (state.pendingQuarterlyReview) {
     state.pendingQuarterlyReview = false;
     saveState(state);
     setTimeout(showQuarterlyReview, 300);
     return;
   }
-  // BDR reminder
+  if (state.pendingWaterCooler) {
+    state.pendingWaterCooler = false;
+    saveState(state);
+    setTimeout(showWaterCoolerModal, 250);
+    return;
+  }
   if (state.pendingBDRReminder) {
     state.pendingBDRReminder = false;
     saveState(state);
     setTimeout(showBDRReminder, 150);
   }
-};
+  if (state.pendingBirthday) {
+    const firstName = state.pendingBirthday;
+    const fav = state.pendingBirthdayFav;
+    state.pendingBirthday    = null;
+    state.pendingBirthdayFav = null;
+    saveState(state);
+    setTimeout(() => showBirthdayModal(firstName, fav), 400);
+  }
+}
 
-window.prevDay = function() {
-  showToast("You can't go back — advance with End Day →");
+window.nextDay = function() {
+  if (_pbTimerInterval) { clearInterval(_pbTimerInterval); _pbTimerInterval = null; }
+
+  // Golf event: check BEFORE advancing (last day of Q, within $20k of quarterly goal)
+  const isLastDayOfQ = state.date.month === 3 && state.date.week === 4 && state.date.day === 5;
+  if (isLastDayOfQ) {
+    const qRev   = (state.currentQuarterRevenue || 0) + (state.currentMonthRevenue || 0);
+    const qQuota = (state.monthlyQuota || 80000) * 3;
+    const gap    = qQuota - qRev;
+    if (gap >= 0 && gap <= 20000) {
+      const activeOpps = state.opportunities.filter(o => ![STAGES.WON, STAGES.LOST].includes(o.stage));
+      const largest    = [...activeOpps].sort((a, b) => b.value - a.value)[0];
+      let golfWon = null;
+      if (largest) {
+        const winValue = Math.max(largest.value, 20000);
+        largest.stage            = STAGES.WON;
+        state.won                = (state.won || 0) + winValue;
+        state.currentMonthRevenue = (state.currentMonthRevenue || 0) + winValue;
+        if (!state.wonDeals) state.wonDeals = [];
+        state.wonDeals.push({ id: largest.id, name: largest.name, company: largest.company, value: winValue, day: state.dayNumber });
+        golfWon = { name: largest.name, company: largest.company, value: winValue };
+        saveState(state);
+        renderAll();
+      }
+      showGolfModal(golfWon, () => {
+        state = advanceDay(state);
+        _currentEmailId    = null;
+        _expandedContactId = null;
+        renderAll();
+        _processPostAdvance();
+      });
+      return;
+    }
+  }
+
+  state = advanceDay(state);
+  _currentEmailId    = null;
+  _expandedContactId = null;
+  renderAll();
+  _processPostAdvance();
 };
 
 // ─── New game / load ──────────────────────────────────────────────────────────
@@ -1049,11 +1237,173 @@ window.closeModal = closeModal;
 
 function _buildLeaderboardMigration() {
   const names = ['Marcus Webb','Diana Park','Kevin Okafor','Elena Johansson','Patrick Ali','Fatima Brennan','George Schmidt','Yuki Martin'];
-  return names.map(name => ({ name, attainment: 40 + Math.floor(Math.random() * 90), dealsWon: Math.floor(Math.random() * 8), revenue: Math.floor(Math.random() * 400000) + 50000 }));
+  return names.map(name => ({ name, attainment: 0, dealsWon: 0, revenue: 0 }));
+}
+
+// ─── Player profile ───────────────────────────────────────────────────────────
+
+const PROFILE_KEY = 'phs_playerProfile';
+function loadPlayerProfile() { try { const r = localStorage.getItem(PROFILE_KEY); return r ? JSON.parse(r) : null; } catch(e) { return null; } }
+function savePlayerProfile(p) { try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch(e) {} }
+
+function applyProfileToState(profile) {
+  if (!profile) return;
+  if (profile.playerAvatar === 'avatar2') state.avatarIndex = 1;
+  else state.avatarIndex = 0;
+  state.playerDisplayName = profile.playerDisplayName;
+  state.playerFirstName   = profile.playerFirstName;
+  state.playerBirthMonth  = profile.playerBirthMonth;
+  saveState(state);
+}
+
+function showHRForm() {
+  const body = `
+    <div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.8">
+      <div style="margin-bottom:8px;color:var(--text2);font-size:12px">Please complete all fields before your first day.</div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-weight:600;margin-bottom:4px">Full Name *</label>
+        <input id="hr-name" type="text" placeholder="First Last" style="width:100%;padding:6px;border:2px solid;font-size:13px;box-sizing:border-box" maxlength="50">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-weight:600;margin-bottom:4px">Salary Requirements *</label>
+        <label style="display:block;margin-bottom:4px"><input type="radio" name="hr-diff" value="easy"> $100,000 (Easy)</label>
+        <label style="display:block;margin-bottom:4px"><input type="radio" name="hr-diff" value="moderate"> $250,000 (Moderate)</label>
+        <label style="display:block"><input type="radio" name="hr-diff" value="hard"> $500,000 (Hard)</label>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-weight:600;margin-bottom:4px">Sex *</label>
+        <label style="display:block;margin-bottom:4px"><input type="radio" name="hr-sex" value="man"> Man</label>
+        <label style="display:block;margin-bottom:4px"><input type="radio" name="hr-sex" value="woman"> Woman</label>
+        <label style="display:block"><input type="radio" name="hr-sex" value="yes"> Yes</label>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-weight:600;margin-bottom:4px">Date of Birth *</label>
+        <input id="hr-dob" type="date" style="width:100%;padding:6px;border:2px solid;font-size:13px;box-sizing:border-box">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="display:block;font-weight:600;margin-bottom:4px">Favourite Thing *</label>
+        <input id="hr-fav" type="text" placeholder="e.g. Pizza" style="width:100%;padding:6px;border:2px solid;font-size:13px;box-sizing:border-box" maxlength="20">
+        <div id="hr-fav-count" style="font-size:11px;color:var(--text3);margin-top:2px">0 / 20 characters</div>
+      </div>
+      <div id="hr-error" style="color:#E24B4A;font-size:12px;margin-bottom:8px;display:none">Please complete all required fields.</div>
+    </div>
+  `;
+  showModal('WIDGET WONDERS HR DEPARTMENT — NEW HIRE ONBOARDING FORM', body, [
+    { label: 'Report for Duty', primary: true, onclick: 'window._hrSubmit()' }
+  ], true);
+
+  setTimeout(() => {
+    const favInput = document.getElementById('hr-fav');
+    const counter  = document.getElementById('hr-fav-count');
+    if (favInput && counter) {
+      favInput.addEventListener('input', () => { counter.textContent = `${favInput.value.length} / 20 characters`; });
+    }
+  }, 50);
+
+  window._hrSubmit = function() {
+    const nameEl  = document.getElementById('hr-name');
+    const dobEl   = document.getElementById('hr-dob');
+    const favEl   = document.getElementById('hr-fav');
+    const diffVal = document.querySelector('input[name="hr-diff"]:checked')?.value;
+    const sexVal  = document.querySelector('input[name="hr-sex"]:checked')?.value;
+    const name = nameEl?.value?.trim();
+    const dob  = dobEl?.value;
+    const fav  = favEl?.value?.trim();
+    [nameEl, dobEl, favEl].forEach(el => { if (el) el.style.borderColor = ''; });
+    let valid = true;
+    if (!name)    { if (nameEl) nameEl.style.borderColor = '#E24B4A'; valid = false; }
+    if (!diffVal) { valid = false; }
+    if (!sexVal)  { valid = false; }
+    if (!dob)     { if (dobEl) dobEl.style.borderColor = '#E24B4A'; valid = false; }
+    if (!fav)     { if (favEl) favEl.style.borderColor = '#E24B4A'; valid = false; }
+    if (!valid) {
+      const errEl = document.getElementById('hr-error');
+      if (errEl) errEl.style.display = 'block';
+      return;
+    }
+    const parts = name.split(' ');
+    const lastName  = parts[parts.length - 1].toUpperCase();
+    const firstName = parts.slice(0, -1).join(' ').toUpperCase() || lastName;
+    const displayName = parts.length > 1 ? `${lastName}, ${parts.slice(0,-1).join(' ').toUpperCase()}` : lastName;
+    const dobMonth = dob ? parseInt(dob.split('-')[1]) : 1;
+    const avatar = sexVal === 'woman' ? 'avatar2' : 'avatar1';
+    const profile = {
+      playerFullName: name,
+      playerDisplayName: displayName,
+      playerFirstName: firstName,
+      playerDifficulty: diffVal,
+      playerSex: sexVal,
+      playerAvatar: avatar,
+      playerDOB: dob,
+      playerBirthMonth: dobMonth,
+      playerFavouriteThing: fav,
+    };
+    savePlayerProfile(profile);
+    closeModal();
+    applyProfileToState(profile);
+    renderAll();
+  };
+}
+
+function showBirthdayModal(firstName, fav) {
+  showModal(
+    'HAPPY BIRTHDAY FROM WIDGET WONDERS',
+    `<div style="text-align:center;font-family:Arial,sans-serif">
+      <img src="opening.png" style="width:100%;max-width:300px;margin-bottom:16px;display:block;margin-left:auto;margin-right:auto">
+      <p style="font-size:13px;line-height:1.7">Happy Birthday Month, ${firstName}! We know your favourite thing is <strong>${fav}</strong>, so we made you a cake with it. Enjoy — you've earned it. Now get back to work.</p>
+    </div>`,
+    [{ label: 'Thanks Dave', onclick: 'window.closeModal()' }]
+  );
+}
+
+function showYearEndScreen() {
+  const yearQuota   = (state.projectedYearlyQuota || Array(12).fill(80000)).reduce((a,b) => a+b, 0);
+  const yearRevenue = state.currentYearRevenue || 0;
+  const yearAtt     = yearQuota > 0 ? Math.round(yearRevenue / yearQuota * 100) : 0;
+  const profile     = loadPlayerProfile();
+  const firstName   = profile?.playerFirstName || state.playerFirstName || 'there';
+  const isWin       = yearAtt >= 90;
+
+  if (isWin) {
+    showModal(
+      'WIDGET WONDERS — ANNUAL PERFORMANCE REVIEW',
+      `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.8">
+        <img src="win.png" style="width:100%;display:block;margin-bottom:16px">
+        <p><strong>CONGRATULATIONS, ${firstName}.</strong></p>
+        <p>After a remarkable year at Widget Wonders, the board has made a decision. Your performance this year — $${yearRevenue.toLocaleString()} against a $${yearQuota.toLocaleString()} target — speaks for itself.</p>
+        <p>Effective immediately, you have been promoted to Sales Manager.</p>
+        <p>You are no longer responsible for your own pipeline. You are now responsible for the pipelines of all 12 members of your team. Their quota is your quota. Their losses are your losses.</p>
+        <p>Welcome to the Sales Manager Sim. We hope you're ready.</p>
+        <p style="font-size:11px;color:var(--text2)">Your final title: Senior Executive Sales Rep of Global Operations</p>
+      </div>`,
+      [{ label: 'Accept Promotion', primary: true, onclick: 'window._yearEndAccept()' }],
+      true
+    );
+  } else {
+    showModal(
+      'WIDGET WONDERS HR DEPARTMENT — NOTICE OF EMPLOYMENT STATUS',
+      `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.8">
+        <img src="lose.png" style="width:100%;display:block;margin-bottom:16px">
+        <p>Dear ${firstName},</p>
+        <p>After careful review of your annual performance — $${yearRevenue.toLocaleString()} against a $${yearQuota.toLocaleString()} target (${yearAtt}% attainment) — Widget Wonders has made the difficult decision not to continue your employment.</p>
+        <p>The fast-paced world of widget sales requires a certain level of pipeline discipline that, unfortunately, was not demonstrated consistently this year.</p>
+        <p>You are welcome to reapply in the future once you have had an opportunity to study the fundamentals of pipeline management.</p>
+        <p>We wish you the best.</p>
+        <p>HR Department<br>Widget Wonders</p>
+      </div>`,
+      [{ label: 'Try Again', primary: true, onclick: 'window._yearEndRetry()' }],
+      true
+    );
+  }
+
+  window._yearEndAccept = function() { clearState(); window.location.reload(); };
+  window._yearEndRetry  = function() { clearState(); window.location.reload(); };
 }
 
 function initGame() {
-  const saved = loadState();
+  const saved   = loadState();
+  const profile = loadPlayerProfile();
+
   if (saved) {
     state = saved;
     // Migrate old saves: ensure new fields exist
@@ -1063,7 +1413,6 @@ function initGame() {
     if (state.avatarIndex === undefined) state.avatarIndex = 0;
     if (state.activeBDR === undefined) state.activeBDR = null;
     if (!state.availableBDRs) state.availableBDRs = ['none'];
-    if (!state.bdrUnlockLog) state.bdrUnlockLog = [];
     if (state.q1AboveQuota === undefined) state.q1AboveQuota = false;
     if (state.q2AboveQuota === undefined) state.q2AboveQuota = false;
     if (state.pendingBDRReminder === undefined) state.pendingBDRReminder = false;
@@ -1084,9 +1433,33 @@ function initGame() {
     if (!state.activeMarketEffects)        state.activeMarketEffects    = [];
     if (!state.weeklySlideModifiers)       state.weeklySlideModifiers   = {};
     if (state.pendingQuarterlyReview === undefined) state.pendingQuarterlyReview = false;
-    if (!state.leaderboard)               state.leaderboard            = _buildLeaderboardMigration();
+    if (!state.leaderboard || state.leaderboard.some(c => c.attainment > 100)) state.leaderboard = _buildLeaderboardMigration();
     if (state.pendingWinBanner === undefined)       state.pendingWinBanner = null;
+    // Sprint 5 state migrations
+    if (state.performanceHistory === undefined)    state.performanceHistory    = [];
+    if (state.currentMonthRevenue === undefined)   state.currentMonthRevenue   = state.monthRevenue || 0;
+    if (state.currentQuarterRevenue === undefined) state.currentQuarterRevenue = 0;
+    if (state.currentYearRevenue === undefined)    state.currentYearRevenue    = 0;
+    if (state.monthlyQuota === undefined)          state.monthlyQuota          = state.quota || 80000;
+    if (!state.projectedYearlyQuota)               state.projectedYearlyQuota  = Array(12).fill(state.monthlyQuota);
+    if (state.territoryLevel === undefined)        state.territoryLevel        = 0;
+    if (state.titleProgress === undefined)         state.titleProgress         = 0;
+    if (state.birthdayFiredThisMonth === undefined) state.birthdayFiredThisMonth = false;
+    if (state.gameCompleted === undefined)         state.gameCompleted         = false;
+    if (state.dealsWonThisMonth === undefined)     state.dealsWonThisMonth     = 0;
+    if (state.dealsLostThisMonth === undefined)    state.dealsLostThisMonth    = 0;
+    if (state.dealsNADThisMonth === undefined)     state.dealsNADThisMonth     = 0;
+    if (state.consecutiveDaysNoDemoBooking === undefined) state.consecutiveDaysNoDemoBooking = 0;
+    if (state.waterCoolerFired === undefined)      state.waterCoolerFired      = false;
+    if (state.pendingWaterCooler === undefined)    state.pendingWaterCooler    = false;
+    // Per-opp score fields
+    state.opportunities.forEach(o => {
+      if (o.demoScore === undefined)     o.demoScore     = 50;
+      if (o.proposalScore === undefined) o.proposalScore = 50;
+      if (o.pricingScore === undefined)  o.pricingScore  = 50;
+    });
     // Add personality fields to existing opps missing them
+    const _cpKeys = Object.keys(CLOSE_PERSONALITY_TYPES);
     state.opportunities.forEach(o => {
       if (!o.personalityType)       o.personalityType     = 'analytical';
       if (!o.personalityRevealed)   o.personalityRevealed = false;
@@ -1094,6 +1467,16 @@ function initGame() {
       if (!o.temperatureHistory)    o.temperatureHistory  = [];
       if (o.probBoost === undefined) o.probBoost          = 0;
       if (!o.proposalMultiplier)    o.proposalMultiplier  = 1.0;
+      // Close personality fields
+      if (!o.closePersonalityType)
+        o.closePersonalityType = _cpKeys[Math.floor(Math.random() * _cpKeys.length)];
+      if (o.closePersonalityRevealed === undefined)
+        o.closePersonalityRevealed = false;
+      // futureClosedDay — estimate from futureExpiry for old saves
+      if (o.futureClosedDay === undefined)
+        o.futureClosedDay = (o.stage === STAGES.FUTURE && o.futureExpiry != null)
+          ? o.futureExpiry - 90
+          : null;
     });
     // Retroactively unlock BDRs for old saves
     if (state.dayNumber >= 5 && !state.availableBDRs.includes('basic'))    state.availableBDRs.push('basic');
@@ -1107,7 +1490,7 @@ function initGame() {
     // Seed with 3 starting opps at staggered deadlines
     for (let i = 0; i < 3; i++) {
       const opp = generateOpportunity(state);
-      opp.scheduleBy = i + 1;
+      opp.scheduleBy = state.dayNumber + 2 + i; // 3-day window (days 0,1,2), staggered by 1 day each
       state.opportunities.push(opp);
     }
     // Welcome email
@@ -1126,9 +1509,9 @@ function initGame() {
     state.opportunities.forEach(opp => {
       state.emails.push({
         id: nextEmailId(),
-        from: opp.name + ' — ' + opp.company,
-        subject: `New demo request — ${opp.company}`,
-        body: `Hi,\n\n${opp.flavourNote}\n\nWe'd love to see a demo. Availability is flexible.\n\nBest,\n${opp.name}`,
+        from: 'CRM System',
+        subject: `New Demo Request — ${opp.company}`,
+        body: `A new demo has been requested by ${opp.name} at ${opp.company}.\n\n${opp.flavourNote}`,
         time: formatDate(state.date),
         type: 'task',
         read: false,
@@ -1138,9 +1521,28 @@ function initGame() {
     });
     saveState(state);
   }
+
+  // Check for game completed
+  if (state.gameCompleted) {
+    renderAll();
+    setTimeout(() => showYearEndScreen(), 200);
+    return;
+  }
+
+  if (profile) {
+    applyProfileToState(profile);
+  }
+
   renderAll();
-  if (!localStorage.getItem('hasSeenIntro')) {
-    setTimeout(showOnboardingModal, 120);
+
+  if (!profile) {
+    if (!localStorage.getItem('hasSeenIntro')) {
+      setTimeout(() => showOnboardingModal(() => showHRForm()), 120);
+    } else {
+      setTimeout(showHRForm, 120);
+    }
+  } else if (!localStorage.getItem('hasSeenIntro')) {
+    setTimeout(() => showOnboardingModal(), 120);
   }
 }
 
@@ -1148,6 +1550,7 @@ function initGame() {
 
 const BDR_AVATAR_COLORS = { none: '#808080', basic: '#808080', standard: '#008080', senior: '#000080', elite: '#5a0000' };
 const BDR_TIER_LABELS   = ['', 'TIER 1', 'TIER 2', 'TIER 3', 'TIER 4'];
+const BDR_PHOTOS        = { basic: 'caseypark.png', standard: 'alexchen.png', senior: 'jordanmills.png', elite: 'samrivera.png' };
 
 function bdrInitials(bdr) {
   if (bdr.id === 'none') return '—';
@@ -1169,8 +1572,13 @@ function renderBDRCard(bdr, isActive, isUnlocked) {
       ? `<button class="btn btn-sm" onclick="window._hireBDR('${bdr.id}')" style="font-size:10px">Hire</button>`
       : `<span style="font-size:10px;font-family:Arial,sans-serif;color:#808080;font-style:italic">${bdr.unlockCondition || ''}</span>`;
 
+  const bdrPhoto = BDR_PHOTOS[bdr.id];
+  const avatarHtml = bdrPhoto && isUnlocked
+    ? `<img src="${bdrPhoto}" style="width:36px;height:36px;object-fit:cover;flex-shrink:0;border:1px solid #808080" alt="${bdr.name}">`
+    : `<div style="width:36px;height:36px;background:${avColor};color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid #808080">${bdrInitials(bdr)}</div>`;
+
   return `<div style="border:2px solid;border-color:${isUnlocked ? '#ffffff #808080 #808080 #ffffff' : '#808080 #ffffff #ffffff #808080'};padding:8px;margin-bottom:6px;background:${isActive ? '#e0e0ff' : isUnlocked ? '#d4d0c8' : '#c0c0c0'};display:flex;gap:10px;align-items:flex-start">
-    <div style="width:36px;height:36px;background:${avColor};color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1px solid #808080">${bdrInitials(bdr)}</div>
+    ${avatarHtml}
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:baseline;gap:6px;margin-bottom:2px;flex-wrap:wrap">
         <span style="font-size:12px;font-family:Arial,sans-serif;font-weight:bold;color:${isUnlocked ? '#000000' : '#808080'}">${bdr.name}</span>
@@ -1227,6 +1635,90 @@ window._fireBDR = function() {
   renderAll();
 };
 
+// ─── Golf event modal ─────────────────────────────────────────────────────────
+
+function showGolfModal(wonOpp, onContinue) {
+  const wonLine = wonOpp
+    ? `<p style="font-size:12px;font-family:Arial,sans-serif;line-height:1.6"><strong>${wonOpp.name}</strong> at <strong>${wonOpp.company}</strong> committed to a deal worth <strong>$${wonOpp.value.toLocaleString()}</strong> after your round. The deal is closed.</p>`
+    : `<p style="font-size:12px;font-family:Arial,sans-serif;line-height:1.6">No active opportunities to close — but it was still a nice round.</p>`;
+
+  showModal(
+    'Quarterly Golf Outing',
+    `<div style="margin:-12px -14px 14px -14px">
+       <img src="golfing.png" style="width:100%;display:block;border-bottom:2px solid #808080" alt="Golf" onerror="this.style.display='none'">
+     </div>
+     <div style="font-family:Arial,sans-serif">
+       <p style="font-size:12px;line-height:1.6;margin-bottom:10px">Your manager Dave invited you to the company golf outing on the last day of the quarter. A prospect you've been warming up joins your foursome.</p>
+       ${wonLine}
+     </div>`,
+    [{ label: 'Not bad for a Tuesday', primary: true, onclick: 'window._golfContinue()' }],
+    true
+  );
+  window._golfContinue = () => { closeModal(); if (onContinue) onContinue(); };
+}
+
+// ─── Water cooler event modal ─────────────────────────────────────────────────
+
+function showWaterCoolerModal() {
+  showModal(
+    'Water Cooler Moment',
+    `<div style="margin:-12px -14px 14px -14px">
+       <img src="water_cooler.png" style="width:100%;display:block;border-bottom:2px solid #808080" alt="Water Cooler" onerror="this.style.display='none'">
+     </div>
+     <div style="font-family:Arial,sans-serif">
+       <p style="font-size:12px;line-height:1.7">Rumor has it John and Sally have been working late together...</p>
+       <p style="font-size:12px;line-height:1.7">Your colleague leans in and whispers — apparently there's a whole list of companies that HR flagged as "high interest" but never followed up on. What do you do?</p>
+     </div>`,
+    [
+      { label: 'Tell HR', primary: true, onclick: 'window._waterCoolerHR()' },
+      { label: 'Say Nothing', onclick: 'window._waterCoolerNothing()' },
+    ],
+    true
+  );
+
+  window._waterCoolerHR = () => {
+    closeModal();
+    for (let i = 0; i < 3; i++) {
+      const opp = generateOpportunity(state);
+      state.opportunities.push(opp);
+      state.emails.push({
+        id: nextEmailId(),
+        from: 'HR System',
+        subject: `Warm Lead Referral — ${opp.company}`,
+        body: `HR has flagged ${opp.name} at ${opp.company} as a high-interest prospect.\n\nThey've requested more information about Widget Wonders solutions. Demo window is open.\n\nHR System`,
+        time: formatDate(state.date),
+        type: 'task',
+        read: false,
+        oppId: opp.id,
+        actionType: 'schedule-demo',
+      });
+    }
+    saveState(state);
+    renderAll();
+    showModal(
+      'HR Notified',
+      `<p style="font-family:Arial,sans-serif;font-size:12px;line-height:1.6">HR dug into the files. Three warm leads have been added to your pipeline — companies that expressed interest but fell through the cracks.</p>`,
+      [{ label: 'Time to dial', primary: true, onclick: 'window.closeModal()' }],
+      true
+    );
+  };
+
+  window._waterCoolerNothing = () => {
+    closeModal();
+    state.emails.push({
+      id: nextEmailId(),
+      from: 'HR — Janet M.',
+      subject: 'RE: Workplace Conduct Policy Reminder',
+      body: `Hi,\n\nIt has come to our attention that certain inter-departmental information may have been shared informally.\n\nAs a reminder, all lead referrals must go through the CRM intake process. Circumventing established workflows — even with good intentions — is a violation of our information governance policy.\n\nPlease review the attached policy document (attached).\n\nBest,\nJanet M.\nHR Business Partner`,
+      time: formatDate(state.date),
+      type: 'manager',
+      read: false,
+    });
+    saveState(state);
+    renderAll();
+  };
+}
+
 // ─── Meeting interruption card ───────────────────────────────────────────────
 
 function showMeetingInterruptionCard(meeting) {
@@ -1237,6 +1729,7 @@ function showMeetingInterruptionCard(meeting) {
     <div class="meeting-card">
       <div class="meeting-card-header">MEETING INVITE — ACCEPTED AUTOMATICALLY</div>
       <div class="meeting-card-body">
+        <img src="meeting.png" style="width:100%;display:block;border-bottom:2px solid #808080;margin-bottom:10px" alt="Meeting" onerror="this.style.display='none'">
         <div style="font-size:13px;font-weight:bold;font-family:Arial,sans-serif;color:#000000;margin-bottom:6px">${meeting.subject}</div>
         <div style="font-size:12px;font-family:Arial,sans-serif;color:#404040;line-height:1.6;margin-bottom:6px">${meeting.desc}</div>
         <div style="font-size:10px;font-family:'Courier New',monospace;color:#808080">This costs 1 action.</div>
@@ -1247,7 +1740,6 @@ function showMeetingInterruptionCard(meeting) {
 
   window._dismissMeeting = () => {
     state.actionsRemaining = Math.max(0, state.actionsRemaining - 1);
-    state.actionsUsedToday++;
     saveState(state);
     renderAll();
     const el = document.getElementById('meeting-overlay');
@@ -1339,7 +1831,7 @@ function showBDRReminder() {
 
 // ─── Onboarding popup (first launch only) ────────────────────────────────────
 
-function showOnboardingModal() {
+function showOnboardingModal(onDone) {
   showModal(
     'Welcome to Pipeline Health Sim',
     `<div style="margin:-12px -14px 14px -14px">
@@ -1347,8 +1839,8 @@ function showOnboardingModal() {
      </div>
      <div style="font-family:Arial,sans-serif;font-size:12px;line-height:1.75;color:#000000">
        The Senior Executive Sales Rep of Global Operations has retired after 40 years of service, and
-       <strong>Pipeline Health Sim</strong> — the leader in widget manufacturing — has hired you to fill their shoes.
-       Pipeline Health Sim has been the gold standard in widgets for over 40 years.
+       <strong>Widget Wonders</strong> — the leader in widget manufacturing — has hired you to fill their shoes.
+       Widget Wonders has been the gold standard in widgets for over 40 years.
        <br><br>
        Your job: build your book of business from scratch. You'll book demos, host presentations,
        schedule pricing meetings, present proposals, and close deals — all while managing a growing
@@ -1364,6 +1856,7 @@ function showOnboardingModal() {
   window._dismissOnboarding = () => {
     localStorage.setItem('hasSeenIntro', '1');
     closeModal();
+    if (onDone) onDone();
   };
 }
 
@@ -1426,10 +1919,148 @@ function showQuarterlyReview() {
   };
 }
 
+// ─── Mark all read ───────────────────────────────────────────────────────────
+
+window._markAllRead = function() {
+  state.emails.forEach(e => e.read = true);
+  renderEmails(state, handleEmailSelect);
+  renderEmailBody(state, _currentEmailId, handleEmailAction);
+  saveState(state);
+};
+
+// ─── Performance Dashboard Modal ─────────────────────────────────────────────
+
+window._openPerformanceModal = function() {
+  const cur       = getCurrentMonthRecord(state);
+  const hist      = state.performanceHistory || [];
+  const pYQ       = state.projectedYearlyQuota || Array(12).fill(state.monthlyQuota || 80000);
+  const yearQuota = pYQ.reduce((a,b) => a+b, 0);
+  const yearRevenue = (state.currentYearRevenue || 0) + cur.revenue;
+  const yearAtt   = yearQuota > 0 ? Math.round(yearRevenue / yearQuota * 100) : 0;
+
+  const qStart   = (state.date.quarter - 1) * 3;
+  const qMonths  = hist.slice(qStart);
+  const qRevenue = qMonths.reduce((a, m) => a + m.revenue, 0) + cur.revenue;
+  const qQuota   = (state.monthlyQuota || 80000) * 3;
+  const qAtt     = Math.round(qRevenue / qQuota * 100);
+
+  function bar(att) {
+    const color = att >= 100 ? '#1D9E75' : att >= 70 ? '#EF9F27' : '#E24B4A';
+    return `<div style="height:10px;background:#ddd;border:1px solid #999;margin-top:4px"><div style="height:100%;width:${Math.min(att,100)}%;background:${color}"></div></div>`;
+  }
+
+  let histRows = '';
+  let lastQuarter = 0;
+  for (const m of hist) {
+    if (m.quarter !== lastQuarter) {
+      if (lastQuarter !== 0) {
+        const qMons = hist.filter(x => x.quarter === lastQuarter);
+        const qRev  = qMons.reduce((a,x) => a+x.revenue, 0);
+        const qQ    = qMons.reduce((a,x) => a+x.quota, 0);
+        histRows += `<tr style="background:#f0f0f0;font-weight:600"><td colspan="4" style="padding:3px 6px;font-size:11px">Q${lastQuarter} Subtotal</td><td style="padding:3px 6px;font-size:11px">$${qRev.toLocaleString()} / $${qQ.toLocaleString()}</td><td></td><td></td></tr>`;
+      }
+      lastQuarter = m.quarter;
+    }
+    const attColor = m.attainment >= 100 ? '#1D9E75' : m.attainment >= 70 ? '#EF9F27' : '#E24B4A';
+    histRows += `<tr><td style="padding:3px 6px;font-size:12px">M${m.month}</td><td style="padding:3px 6px;font-size:12px">Q${m.quarter}</td><td style="padding:3px 6px;font-size:12px">$${m.quota.toLocaleString()}</td><td style="padding:3px 6px;font-size:12px">$${m.revenue.toLocaleString()}</td><td style="padding:3px 6px;font-size:12px;color:${attColor}">${m.attainment}%</td><td style="padding:3px 6px;font-size:12px">${m.hitQuota ? '✓' : '✗'}</td></tr>`;
+  }
+  const curColor = cur.attainment >= 100 ? '#1D9E75' : cur.attainment >= 70 ? '#EF9F27' : '#E24B4A';
+  histRows += `<tr style="background:#fff8dc"><td style="padding:3px 6px;font-size:12px">M${cur.month} (now)</td><td style="padding:3px 6px;font-size:12px">Q${cur.quarter}</td><td style="padding:3px 6px;font-size:12px">$${cur.quota.toLocaleString()}</td><td style="padding:3px 6px;font-size:12px">$${cur.revenue.toLocaleString()}</td><td style="padding:3px 6px;font-size:12px;color:${curColor}">${cur.attainment}%</td><td style="padding:3px 6px;font-size:12px;font-style:italic">—</td></tr>`;
+
+  let chartBars = '';
+  for (let i = 0; i < 12; i++) {
+    const m  = hist[i];
+    const qv = pYQ[i];
+    if (m) {
+      const attPct  = Math.min(100, Math.round(m.revenue / m.quota * 100));
+      const barColor = attPct >= 100 ? '#1D9E75' : attPct >= 70 ? '#EF9F27' : '#E24B4A';
+      chartBars += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="height:60px;width:100%;background:#ddd;border:1px solid #999;position:relative"><div style="position:absolute;bottom:0;left:0;right:0;height:${attPct}%;background:${barColor}"></div></div><div style="font-size:9px;color:var(--text3)">M${i+1}</div></div>`;
+    } else if (i === hist.length) {
+      chartBars += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="height:60px;width:100%;background:#fff8dc;border:2px solid #EF9F27;position:relative"></div><div style="font-size:9px;color:#EF9F27">M${i+1}</div></div>`;
+    } else {
+      chartBars += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px"><div style="height:60px;width:100%;background:#f5f5f5;border:1px dashed #ccc"></div><div style="font-size:9px;color:var(--text3)">M${i+1}</div></div>`;
+    }
+  }
+
+  // Leaderboard section
+  const monthlyQuota     = state.monthlyQuota || state.quota || 80000;
+  const playerAttainment = Math.round(((state.currentMonthRevenue || 0) / monthlyQuota) * 100);
+  const lbEntries = [
+    { name: 'You', attainment: playerAttainment, revenue: state.won || 0, dealsWon: (state.wonDeals || []).length, isPlayer: true },
+    ...(state.leaderboard || []).map(c => ({ ...c, isPlayer: false }))
+  ].sort((a, b) => b.attainment - a.attainment);
+  const lbRows = lbEntries.map((e, i) => {
+    const bg   = e.isPlayer ? 'background:#000080;color:#ffffff;' : (i % 2 === 0 ? 'background:#f5f5f5;' : '');
+    const bold = e.isPlayer ? 'font-weight:bold;' : '';
+    return `<tr style="${bg}${bold}">
+      <td style="padding:3px 6px;font-size:11px">${i + 1}</td>
+      <td style="padding:3px 6px;font-size:11px">${e.name}</td>
+      <td style="padding:3px 6px;font-size:11px;text-align:right">${e.attainment}%</td>
+      <td style="padding:3px 6px;font-size:11px;text-align:right">$${(e.revenue || 0).toLocaleString()}</td>
+      <td style="padding:3px 6px;font-size:11px;text-align:right">${e.dealsWon || 0}</td>
+    </tr>`;
+  }).join('');
+
+  const body = `<div style="font-family:Arial,sans-serif;font-size:13px;max-width:600px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px" class="perf-grid">
+      <div style="border:2px solid;padding:10px">
+        <div style="font-weight:600;margin-bottom:6px">This Month</div>
+        <div>$${cur.revenue.toLocaleString()} of $${cur.quota.toLocaleString()}</div>
+        <div style="font-size:12px;color:var(--text2)">${cur.attainment}% attainment</div>
+        ${bar(cur.attainment)}
+      </div>
+      <div style="border:2px solid;padding:10px">
+        <div style="font-weight:600;margin-bottom:6px">This Quarter</div>
+        <div>$${qRevenue.toLocaleString()} of $${qQuota.toLocaleString()}</div>
+        <div style="font-size:12px;color:var(--text2)">${qAtt}% attainment</div>
+        ${bar(qAtt)}
+      </div>
+      <div style="border:2px solid;padding:10px">
+        <div style="font-weight:600;margin-bottom:6px">This Year</div>
+        <div>$${yearRevenue.toLocaleString()} of $${yearQuota.toLocaleString()}</div>
+        <div style="font-size:12px;color:var(--text2)">${yearAtt}% attainment</div>
+        ${bar(yearAtt)}
+      </div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-weight:600;margin-bottom:8px">Monthly History</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#ddd"><th style="padding:4px 6px;text-align:left">Month</th><th style="padding:4px 6px;text-align:left">Q</th><th style="padding:4px 6px;text-align:left">Goal</th><th style="padding:4px 6px;text-align:left">Revenue</th><th style="padding:4px 6px;text-align:left">Attain.</th><th style="padding:4px 6px;text-align:left">Result</th></tr></thead>
+          <tbody>${histRows}</tbody>
+        </table>
+      </div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div style="font-weight:600;margin-bottom:8px">Year Overview</div>
+      <div style="display:flex;gap:4px;height:80px;align-items:flex-end">${chartBars}</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--text2)">Year Goal: $${yearQuota.toLocaleString()} | Won to Date: $${yearRevenue.toLocaleString()} | Remaining: $${Math.max(0, yearQuota - yearRevenue).toLocaleString()}</div>
+    </div>
+    <div>
+      <div style="font-weight:600;margin-bottom:8px">Leaderboard — This Quarter</div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#ddd">
+            <th style="padding:4px 6px;text-align:left">#</th>
+            <th style="padding:4px 6px;text-align:left">Rep</th>
+            <th style="padding:4px 6px;text-align:right">Attainment</th>
+            <th style="padding:4px 6px;text-align:right">Revenue</th>
+            <th style="padding:4px 6px;text-align:right">Deals</th>
+          </tr></thead>
+          <tbody>${lbRows}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+
+  showModal('PERFORMANCE DASHBOARD — PIPELINE HEALTH SIM', body, [{ label: 'Close', onclick: 'window.closeModal()' }]);
+};
+
 // ─── Leaderboard Modal ───────────────────────────────────────────────────────
 
 window._openLeaderboardModal = function() {
-  const playerAttainment = Math.round((state.won / state.quota) * 100);
+  const monthlyQuota     = state.monthlyQuota || state.quota || 80000;
+  const playerAttainment = Math.round(((state.currentMonthRevenue || state.monthRevenue || 0) / monthlyQuota) * 100);
   const allEntries = [
     { name: 'You', attainment: playerAttainment, isPlayer: true, revenue: state.won, dealsWon: state.wonDeals.length },
     ...(state.leaderboard || []).map(c => ({ ...c, isPlayer: false }))

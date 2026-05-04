@@ -23,11 +23,11 @@
       <span class="quota-text" id="quota-pct">$0 / $80k</span>
     </div>
     <div class="day-nav">
-      <button onclick="prevDay()">&#8592;</button>
       <span class="day-label" id="header-date">Q1·M1·W1·D1</span>
       <button onclick="nextDay()">End day &#8594;</button>
     </div>
     <button class="btn btn-sm" onclick="window.openBDRPanel()" id="bdr-btn">BDR</button>
+    <button id="perf-btn" onclick="window._openPerformanceModal()" class="btn btn-sm header-btn">Performance</button>
     <button class="btn btn-sm" onclick="newGame()">New game</button>
   </div>
 </header>
@@ -79,37 +79,6 @@
 
 </main>
 
-<!-- ── Stats footer ───────────────────────────────────────────────────────── -->
-<footer class="stats-footer">
-  <div class="stat-card">
-    <div class="stat-label">Won this month</div>
-    <div class="stat-val" id="stat-won" style="color:#00aa00">$0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Active opps</div>
-    <div class="stat-val" id="stat-active">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Urgent</div>
-    <div class="stat-val" id="stat-urgent">0</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Attainment</div>
-    <div class="stat-val" id="stat-pct">0%</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Monthly quota</div>
-    <div class="stat-val" id="stat-quota">$80k</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Next Q quota</div>
-    <div class="stat-val" id="stat-nextq">$80k</div>
-  </div>
-  <div class="stat-card leaderboard-panel" id="stat-leaderboard" style="flex-direction:column;align-items:flex-start;gap:1px;cursor:pointer">
-    <div class="stat-label">Leaderboard</div>
-    <div style="font-size:10px;color:#808080;font-family:Arial,sans-serif">—</div>
-  </div>
-</footer>
 
 <!-- ── Modal overlay ──────────────────────────────────────────────────────── -->
 <div class="modal-wrap" id="modal-wrap" style="display:none">
@@ -122,8 +91,6 @@
     <div class="modal-buttons" id="modal-buttons"></div>
   </div>
 </div>
-
-<div id="id-card" class="id-card"></div>
 
 <script type="module" src="js/main.js"></script>
 </body>
