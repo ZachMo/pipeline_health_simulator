@@ -9,7 +9,7 @@ import {
   actionScheduleDemo, actionHostDemo, actionSchedulePricing,
   actionBuildProposal, actionHostPricing, actionCloseCall, actionRebookCall,
   actionTouchBase, actionBuyerWalkaway, actionSubmitForecast,
-  getActiveOpps, formatDate, dayNumberToDate, nextEmailId,
+  getActiveOpps, formatDate, dayNumberToDate, nextEmailId, syncEmailIdCounter,
   BDR_ROSTER, getActiveBDR, hasSkill, SKILL_TREE, BUYER_PERSONALITIES,
   getCurrentMonthRecord, TITLE_PROGRESSION,
   CLOSE_PERSONALITY_TYPES,
@@ -1405,6 +1405,8 @@ function showYearEndScreen() {
 function initGame() {
   const saved   = loadState();
   const profile = loadPlayerProfile();
+
+  if (saved) syncEmailIdCounter(saved.emails);
 
   if (saved) {
     state = saved;

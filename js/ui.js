@@ -94,12 +94,14 @@ export function renderCalendar(state, onCalendarEventClick) {
       >${label}</div>`;
     }).join('');
 
+    const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+    const dayName   = DAY_NAMES[date.day - 1];
     const borderStyle = isToday
       ? 'border:2px solid #000080;'
       : 'border:2px solid;border-color:#808080 #ffffff #ffffff #808080;';
     const todayHeader = isToday
-      ? `<div style="background:#000080;color:#ffffff;padding:1px 4px;margin:-5px -5px 4px -5px;font-size:10px;font-family:Arial,sans-serif;font-weight:bold">D${date.day} TODAY</div>`
-      : `<div style="font-size:10px;font-family:Arial,sans-serif;color:#404040;margin-bottom:3px">D${date.day}</div>`;
+      ? `<div style="background:#000080;color:#ffffff;padding:1px 4px;margin:-5px -5px 4px -5px;font-size:10px;font-family:Arial,sans-serif;font-weight:bold">${dayName} — TODAY</div>`
+      : `<div style="font-size:10px;font-family:Arial,sans-serif;color:#404040;margin-bottom:3px">${dayName}</div>`;
     return `<div style="${borderStyle}min-height:72px;padding:5px;${isPast ? 'opacity:.55;' : ''}background:#d4d0c8;">
       ${todayHeader}
       ${evHtml}
@@ -136,14 +138,16 @@ export function renderEmails(state, onEmailSelect) {
     panelHeader.appendChild(markBtn);
   }
 
-  const sorted = [...state.emails].reverse();
-  const list   = document.getElementById('inbox-list');
+  const MAX_SHOWN = 12;
+  const sorted  = [...state.emails].reverse();
+  const visible = sorted.slice(0, MAX_SHOWN);
+  const list    = document.getElementById('inbox-list');
 
   const olderEl = document.getElementById('inbox-older');
   if (olderEl) {
-    const extra = sorted.length - 5;
+    const extra = sorted.length - MAX_SHOWN;
     if (extra > 0) {
-      olderEl.textContent = `↑ ${extra} older email${extra > 1 ? 's' : ''}`;
+      olderEl.textContent = `${extra} older email${extra > 1 ? 's' : ''} not shown`;
       olderEl.style.display = '';
     } else {
       olderEl.style.display = 'none';
@@ -158,7 +162,8 @@ export function renderEmails(state, onEmailSelect) {
 
   list.onclick = null; // clear any previous delegated listener
 
-  list.innerHTML = sorted.map(e => {
+  const prevTop = list.scrollTop;
+  list.innerHTML = visible.map(e => {
     const isSelected = e.id === _selectedEmailId;
     const newLabel   = e.read ? '' : `<span style="color:#00aa00;font-weight:bold;font-size:10px;font-family:Arial,sans-serif;flex-shrink:0;margin-top:2px;white-space:nowrap;pointer-events:none">[NEW]</span>`;
     const preview    = e.body.replace(/\n/g, ' ').substring(0, 55);
@@ -178,6 +183,11 @@ export function renderEmails(state, onEmailSelect) {
       </div>
     </div>`;
   }).join('');
+
+  // Restore scroll so selecting an email doesn't jump the list.
+  // On a new day (_selectedEmailId not in visible list), reset to top so newest show first.
+  const selectedStillVisible = _selectedEmailId && visible.some(e => e.id === _selectedEmailId);
+  list.scrollTop = selectedStillVisible ? prevTop : 0;
 }
 
 export function renderEmailBody(state, emailId, onEmailAction) {

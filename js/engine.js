@@ -364,6 +364,12 @@ let _emailId = 10; // start above manually-assigned IDs in initGame
 
 export function nextEmailId() { return ++_emailId; }
 
+export function syncEmailIdCounter(emails) {
+  if (!emails || emails.length === 0) return;
+  const maxId = Math.max(...emails.map(e => e.id));
+  if (maxId >= _emailId) _emailId = maxId + 1;
+}
+
 function makeEmail(overrides) {
   return { id: ++_emailId, read: false, time: '', oppId: null, actionType: null, ...overrides };
 }
