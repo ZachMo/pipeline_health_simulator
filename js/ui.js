@@ -120,6 +120,8 @@ export function renderCalendar(state, onCalendarEventClick) {
 
 let _selectedEmailId = null;
 
+export function clearEmailSelection() { _selectedEmailId = null; }
+
 export function renderEmails(state, onEmailSelect) {
   const unread = state.emails.filter(e => !e.read).length;
   const badge  = document.getElementById('email-unread-badge');

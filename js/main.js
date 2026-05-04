@@ -18,7 +18,7 @@ import {
 import {
   renderHeader, renderCalendar, renderEmails, renderEmailBody,
   renderPhone, renderPipeline, renderStats, renderIdCard,
-  showModal, closeModal,
+  showModal, closeModal, clearEmailSelection,
 } from './ui.js';
 
 import { CLOSE_DIALOGUES, REBOOK_DIALOGUES } from './dialogues.js';
@@ -1213,6 +1213,7 @@ window.nextDay = function() {
         state = advanceDay(state);
         _currentEmailId    = null;
         _expandedContactId = null;
+        clearEmailSelection();
         renderAll();
         _processPostAdvance();
       });
@@ -1223,6 +1224,7 @@ window.nextDay = function() {
   state = advanceDay(state);
   _currentEmailId    = null;
   _expandedContactId = null;
+  clearEmailSelection();
   renderAll();
   _processPostAdvance();
 };
@@ -1407,6 +1409,24 @@ function initGame() {
   const profile = loadPlayerProfile();
 
   if (saved) syncEmailIdCounter(saved.emails);
+
+  // Repair duplicate email IDs caused by the _emailId counter resetting to 10 on
+  // every page load before syncEmailIdCounter was introduced. state.emails.find()
+  // returns the first match, so duplicates caused wrong bodies to open and multiple
+  // items to highlight as selected. Keep the first occurrence of each ID; assign a
+  // fresh ID to every subsequent duplicate, updating the pipeline-review cross-reference.
+  if (saved && saved.emails) {
+    const seenEmailIds = new Set();
+    saved.emails.forEach(e => {
+      if (seenEmailIds.has(e.id)) {
+        const oldId = e.id;
+        e.id = nextEmailId();
+        if (saved.pipelineReviewEmailId === oldId) saved.pipelineReviewEmailId = e.id;
+      } else {
+        seenEmailIds.add(e.id);
+      }
+    });
+  }
 
   if (saved) {
     state = saved;
