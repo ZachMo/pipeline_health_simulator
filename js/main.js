@@ -34,12 +34,14 @@ function _nameHash(name) {
   return h;
 }
 
+const _MALE_PHOTOS   = ['male1.png','male2.png','male3.png','male5.png','male6.png','male7.png','male8.png'];
+const _FEMALE_PHOTOS = ['female1.png','female2.png','female3.png','female4.png','female5.png'];
+
 function _getCallPhoto(fullName) {
   const first = fullName.split(' ')[0];
-  const h = _nameHash(fullName);
-  return _FEMALE_FIRST_NAMES.has(first)
-    ? `female${(h % 5) + 1}.png`
-    : `male${(h % 8) + 1}.png`;
+  const h     = _nameHash(fullName);
+  const pool  = _FEMALE_FIRST_NAMES.has(first) ? _FEMALE_PHOTOS : _MALE_PHOTOS;
+  return pool[h % pool.length];
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
