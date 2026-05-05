@@ -119,8 +119,13 @@ export function renderCalendar(state, onCalendarEventClick) {
 // ─── Email — Outlook split panel ──────────────────────────────────────────────
 
 let _selectedEmailId = null;
+let _emailsShown     = 12;
+const _EMAIL_PAGE    = 12;
 
-export function clearEmailSelection() { _selectedEmailId = null; }
+export function clearEmailSelection() {
+  _selectedEmailId = null;
+  _emailsShown     = _EMAIL_PAGE;
+}
 
 export function renderEmails(state, onEmailSelect) {
   const unread = state.emails.filter(e => !e.read).length;
@@ -140,19 +145,27 @@ export function renderEmails(state, onEmailSelect) {
     panelHeader.appendChild(markBtn);
   }
 
-  const MAX_SHOWN = 12;
   const sorted  = [...state.emails].reverse();
-  const visible = sorted.slice(0, MAX_SHOWN);
+  const visible = sorted.slice(0, _emailsShown);
+  const extra   = sorted.length - _emailsShown;
   const list    = document.getElementById('inbox-list');
 
   const olderEl = document.getElementById('inbox-older');
   if (olderEl) {
-    const extra = sorted.length - MAX_SHOWN;
     if (extra > 0) {
-      olderEl.textContent = `${extra} older email${extra > 1 ? 's' : ''} not shown`;
-      olderEl.style.display = '';
+      const loadCount = Math.min(extra, _EMAIL_PAGE);
+      olderEl.textContent = `Load ${loadCount} older email${loadCount !== 1 ? 's' : ''} (${extra} remaining)`;
+      olderEl.style.display  = '';
+      olderEl.style.cursor   = 'pointer';
+      olderEl.style.color    = '#000080';
+      olderEl.style.textDecoration = 'underline';
+      olderEl.onclick = () => {
+        _emailsShown += _EMAIL_PAGE;
+        renderEmails(state, onEmailSelect);
+      };
     } else {
       olderEl.style.display = 'none';
+      olderEl.onclick = null;
     }
   }
 
